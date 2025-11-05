@@ -1,0 +1,1 @@
+from .rubro import Rubro

@@ -41,6 +41,13 @@ class Inspector(db.Model):
     )
 
     turno = db.relationship("Turno", back_populates="inspectores")
+    # en app/models/inspector.py
+    actuaciones = db.relationship(
+        "Actuacion",
+        secondary="actuacion_inspector",
+        back_populates="inspectores",
+        passive_deletes=True,
+    )
 
     def to_dict(self):
         return {

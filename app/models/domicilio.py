@@ -41,6 +41,12 @@ class Domicilio(db.Model):
     # Relaciones
     barrio = db.relationship("Barrio", back_populates="domicilios")
     distrito = db.relationship("Distrito")
+    relevamiento = db.relationship(
+        "Relevamiento",
+        back_populates="domicilio",
+        uselist=False,  # 1:1
+        passive_deletes=True,
+    )
 
     def to_dict(self):
         return {

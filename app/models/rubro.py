@@ -18,6 +18,12 @@ class Rubro(db.Model):
         server_default=func.current_timestamp(),
         onupdate=func.current_timestamp(),
     )
+    relevamiento = db.relationship(
+        "Relevamiento",
+        back_populates="rubro",
+        uselist=False,  # 1:1
+        passive_deletes=True,
+    )
 
     def __repr__(self):
         return f"<Rubro id={self.id} nombre={self.nombre!r} activo={self.activo}>"

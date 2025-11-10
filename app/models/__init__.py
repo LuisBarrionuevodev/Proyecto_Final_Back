@@ -24,5 +24,7 @@ from .notificacion import Notificacion
 from .notificacion_motivo import NotificacionMotivo
 from .oficio import Oficio
 from .orden_trabajo import OrdenTrabajo
+from .relevamiento import Relevamiento
 from .rubro import Rubro
 from .turno import Turno
+from .usuario import Usuario

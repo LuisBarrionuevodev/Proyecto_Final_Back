@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import List, Optional
 
 from pydantic import (
@@ -80,6 +80,28 @@ class ActuacionItem(BaseModel):
         s = to_upper_trim(v)
         validar_no_vacio(s, campo)
         return s
+    @field_validator("fecha_actuacion", mode="before")
+    @classmethod
+    def _parse_fecha(cls, v):
+        """
+        Acepta:
+        - date (ya parseado)
+        - strings tipo 'DD/MM/AA', 'DD/MM/AAAA' o 'YYYY-MM-DD'
+        """
+        if isinstance(v, date):
+            return v
+        if v is None:
+            raise ValueError("fecha_actuacion es obligatoria")
+
+        s = str(v).strip()
+        for fmt in ("%d/%m/%y", "%d/%m/%Y", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(s, fmt).date()
+            except ValueError:
+                continue
+
+        raise ValueError("fecha_actuacion debe tener formato DD/MM/AA")
+
 
     @field_validator("contrib_nombre", mode="before")
     @classmethod

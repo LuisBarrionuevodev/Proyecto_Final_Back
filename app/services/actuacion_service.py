@@ -425,27 +425,34 @@ def _procesar_actas_base(
 
 
 def _procesar_actas_reinspeccion(actuacion: Actuacion, item: ActuacionItem) -> None:
+    # Actas "del día" igual que inspección
     _procesar_actas_base(actuacion, item)
 
+    # SOLO maneja NOTIFICACIÓN PREVIA, no comprobación
     if item.notificacion_previa_num:
         anio = _anio_acta(item, None)
         notificacion = db.session.execute(
-            select(Notificacion).filter_by(numero_acta=item.notificacion_previa_num, anio=anio)
+            select(Notificacion).filter_by(
+                numero_acta=item.notificacion_previa_num,
+                anio=anio,
+            )
         ).scalar_one_or_none()
+
         if not notificacion:
+            # Crear acta notificación sin motivos, contexto PREVIA
             notificacion = _crear_notificacion(
-                actuacion, item.notificacion_previa_num, anio, [], "PREVIA"
+                actuacion,
+                item.notificacion_previa_num,
+                anio,
+                [],
+                "PREVIA",
             )
         else:
+            # Vincularla como PREVIA
             _vincular_notificacion(actuacion, notificacion, "PREVIA")
-        _vincular_notificacion(actuacion, notificacion, "DIA")
 
-    if item.comprobacion_previa_num:
-        anio = _anio_acta(item, None)
-        acta = _crear_acta_comprobacion(
-            actuacion, item.comprobacion_previa_num, anio, "PREVIA", True
-        )
-        _vincular_comprobacion(actuacion, acta, "DIA")
+        # Y también marcar que se "actúa de nuevo" en esta actuación
+        _vincular_notificacion(actuacion, notificacion, "DIA")
 
 
 def _procesar_actas_ratificacion(actuacion: Actuacion, item: ActuacionItem) -> None:

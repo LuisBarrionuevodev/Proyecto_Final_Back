@@ -1,10 +1,9 @@
 from flask import Flask
 from flask_migrate import Migrate
-from flask_sqlalchemy import SQLAlchemy
 
 from .config import get_config
+from .database import db
 
-db = SQLAlchemy()
 migrate = Migrate()
 
 
@@ -24,9 +23,10 @@ def create_app(config_name: str | None = None) -> Flask:
     migrate.init_app(app, db)
 
     # Registrar API REST
-    from .api import api_bp  # noqa: WPS433 (import interno a propósito)
+    from .routes import actuaciones_bp, health_bp  # noqa: WPS433
 
-    app.register_blueprint(api_bp, url_prefix="/api/v1")
+    app.register_blueprint(health_bp, url_prefix="/api/v1/health")
+    app.register_blueprint(actuaciones_bp, url_prefix="/api/v1/actuaciones")
 
     @app.get("/")
     def root():

@@ -1,9 +1,8 @@
 import axios from "axios";
 
-export const apiClient = 
-axios.create({
-  baseURL: "http://localhost:3000", //  cambiar al backend real después
+export const apiClient = axios.create({
+  baseURL: "http://localhost:5000/api/v1",
   headers: {
     "Content-Type": "application/json",
   },
-})
+});

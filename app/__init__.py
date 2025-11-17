@@ -1,6 +1,7 @@
 from flask import Flask
 from flask_migrate import Migrate
 
+from .config import get_config
 from .database import db
 
 migrate = Migrate()
@@ -9,13 +10,9 @@ migrate = Migrate()
 def create_app() -> Flask:
     app = Flask(__name__)
 
-    # 👉 CONFIG DIRECTA DE LA BASE (MySQL)
-    # Cambiá "usuario", "password" y "devvproyectofinal" por los tuyos reales
-    app.config["SQLALCHEMY_DATABASE_URI"] = (
-        "mysql+mysqlclient://usuario:password@localhost:3306/devvproyectofinal?charset=utf8mb4"
-    )
-    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-    app.config["SECRET_KEY"] = "dev-secret"
+    # Configuración de la aplicación (carga desde .env mediante get_config)
+    config_class = get_config()
+    app.config.from_object(config_class)
 
     # Inicializar extensiones
     db.init_app(app)

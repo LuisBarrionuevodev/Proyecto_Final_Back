@@ -2,7 +2,7 @@ import { apiClient } from "./apiClient";
 import type { IActuacion } from "../types/actuaciones";
 
 export const getActuaciones = async (): Promise<IActuacion[]> => {
-  const { data } = await apiClient.get("/");
+  const { data } = await apiClient.get("/actuaciones");
   return data;
 };
 
@@ -11,7 +11,10 @@ export const createActuacion = async (body: IActuacion): Promise<IActuacion> => 
   return data;
 };
 
-export const updateActuacion = async (id: Number, body: IActuacion): Promise<IActuacion> => {
+export const updateActuacion = async (
+  id: number,
+  body: IActuacion,
+): Promise<IActuacion> => {
   const { data } = await apiClient.put(`/actuaciones/${id}`, body);
   return data;
 };

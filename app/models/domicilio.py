@@ -47,6 +47,11 @@ class Domicilio(db.Model):
         uselist=False,  # 1:1
         passive_deletes=True,
     )
+    establecimientos = db.relationship(
+        "EstablecimientoDomicilio",
+        back_populates="domicilio",
+        lazy="selectin",  # opcional, podés omitirlo si querés
+    )
 
     def to_dict(self):
         return {

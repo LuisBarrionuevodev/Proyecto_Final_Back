@@ -41,6 +41,11 @@ class Contribuyente(db.Model):
 
     doc_tipo = db.relationship("DocumentoTipo", lazy="joined", passive_deletes=True)
     genero = db.relationship("Genero", lazy="joined", passive_deletes=True)
+    establecimientos = db.relationship(
+        "Establecimiento",
+        back_populates="contribuyente",
+        lazy="selectin",  # opcional; podés dejarlo sin lazy
+    )
 
     def __repr__(self):
         return f"<Contribuyente id={self.id} {self.apellido}, {self.nombre}>"

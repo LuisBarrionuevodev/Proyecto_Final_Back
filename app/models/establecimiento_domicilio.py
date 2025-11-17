@@ -46,10 +46,6 @@ class EstablecimientoDomicilio(db.Model):
     )
 
     # Relaciones directas
-    establecimiento = db.relationship(
-        "Establecimiento", backref="establecimiento_domicilios"
-    )
-    domicilio = db.relationship("Domicilio", backref="establecimiento_domicilios")
 
     # --- utilidades ---
     def to_dict(self):

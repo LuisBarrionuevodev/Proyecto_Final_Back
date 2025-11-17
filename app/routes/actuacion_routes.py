@@ -41,7 +41,7 @@ def crear_actuaciones():
                     }
                 )
 
-        return jsonify({"actuaciones": actuaciones_creadas}), 201
+        return jsonify(actuaciones_creadas), 201
     except ActuacionServiceError as e:
         db.session.rollback()
         return jsonify({"detail": str(e)}), 400

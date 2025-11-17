@@ -177,7 +177,7 @@ def _crear_notificacion(
     anio: int,
     motivos: Iterable[str],
     contexto: str,
-) -> None:
+) -> Notificacion:
     notificacion = db.session.execute(
         select(Notificacion).filter_by(numero_acta=numero, anio=anio)
     ).scalar_one_or_none()
@@ -210,6 +210,17 @@ def _crear_notificacion(
             )
 
     _vincular_notificacion(actuacion, notificacion, contexto)
+    return notificacion
+
+
+def _merge_contexto(actual: Optional[str], nuevo: Optional[str]) -> Optional[str]:
+    if not nuevo:
+        return actual
+    if not actual:
+        return nuevo
+    valores = {c.strip() for c in actual.split("|") if c.strip()}
+    valores.add(nuevo)
+    return "|".join(sorted(valores))
 
 
 def _vincular_notificacion(
@@ -221,11 +232,13 @@ def _vincular_notificacion(
         )
     ).scalar_one_or_none()
     if existente:
-        existente.contexto = contexto
+        existente.contexto = _merge_contexto(existente.contexto, contexto)
         return
     db.session.add(
         ActuacionNotificacion(
-            actuacion_id=actuacion.id, notificacion_id=notificacion.id, contexto=contexto
+            actuacion_id=actuacion.id,
+            notificacion_id=notificacion.id,
+            contexto=_merge_contexto(None, contexto),
         )
     )
 
@@ -246,6 +259,8 @@ def _crear_acta_comprobacion(
         acta.actuada_dos_veces = True
 
     _vincular_comprobacion(actuacion, acta, contexto)
+    if marcada_doble and not acta.actuada_dos_veces:
+        acta.actuada_dos_veces = True
     return acta
 
 
@@ -258,11 +273,13 @@ def _vincular_comprobacion(
         )
     ).scalar_one_or_none()
     if existente:
-        existente.contexto = contexto
+        existente.contexto = _merge_contexto(existente.contexto, contexto)
         return
     db.session.add(
         ActuacionComprobacion(
-            actuacion_id=actuacion.id, acta_comprobacion_id=acta.id, contexto=contexto
+            actuacion_id=actuacion.id,
+            acta_comprobacion_id=acta.id,
+            contexto=_merge_contexto(None, contexto),
         )
     )
 
@@ -381,7 +398,11 @@ def _crear_oficio(acta: ActaComprobacion, item: ActuacionItem) -> None:
     )
 
 
-def _procesar_actas_inspeccion(actuacion: Actuacion, item: ActuacionItem) -> None:
+def _procesar_actas_base(
+    actuacion: Actuacion,
+    item: ActuacionItem,
+    incluir_comprobacion: bool = True,
+) -> Optional[ActaComprobacion]:
     _crear_acta_inspeccion(actuacion, item)
 
     if item.acta_notificacion_num:
@@ -389,53 +410,68 @@ def _procesar_actas_inspeccion(actuacion: Actuacion, item: ActuacionItem) -> Non
         motivos = [item.notificacion_motivo_1, item.notificacion_motivo_2, item.notificacion_motivo_3]
         _crear_notificacion(actuacion, item.acta_notificacion_num, anio, motivos, "DIA")
 
-    if item.acta_comprobacion_num:
+    acta_comp_creada: Optional[ActaComprobacion] = None
+    if incluir_comprobacion and item.acta_comprobacion_num:
         anio = _anio_acta(item, None)
-        acta = _crear_acta_comprobacion(actuacion, item.acta_comprobacion_num, anio, "DIA", False)
-        _crear_oficio(acta, item)
+        acta_comp_creada = _crear_acta_comprobacion(
+            actuacion, item.acta_comprobacion_num, anio, "DIA", False
+        )
+        _crear_oficio(acta_comp_creada, item)
 
     _crear_acta_clausura(actuacion, item)
     _crear_acta_decomiso(actuacion, item)
     _crear_expediente(actuacion, item)
+    return acta_comp_creada
 
 
 def _procesar_actas_reinspeccion(actuacion: Actuacion, item: ActuacionItem) -> None:
-    _procesar_actas_inspeccion(actuacion, item)
+    _procesar_actas_base(actuacion, item)
 
     if item.notificacion_previa_num:
         anio = _anio_acta(item, None)
         notificacion = db.session.execute(
             select(Notificacion).filter_by(numero_acta=item.notificacion_previa_num, anio=anio)
         ).scalar_one_or_none()
-        if notificacion:
-            _vincular_notificacion(actuacion, notificacion, "PREVIA")
+        if not notificacion:
+            notificacion = _crear_notificacion(
+                actuacion, item.notificacion_previa_num, anio, [], "PREVIA"
+            )
         else:
-            _crear_notificacion(actuacion, item.notificacion_previa_num, anio, [], "PREVIA")
+            _vincular_notificacion(actuacion, notificacion, "PREVIA")
+        _vincular_notificacion(actuacion, notificacion, "DIA")
 
     if item.comprobacion_previa_num:
         anio = _anio_acta(item, None)
-        _crear_acta_comprobacion(actuacion, item.comprobacion_previa_num, anio, "PREVIA", True)
+        acta = _crear_acta_comprobacion(
+            actuacion, item.comprobacion_previa_num, anio, "PREVIA", True
+        )
+        _vincular_comprobacion(actuacion, acta, "DIA")
 
 
 def _procesar_actas_ratificacion(actuacion: Actuacion, item: ActuacionItem) -> None:
-    _procesar_actas_inspeccion(actuacion, item)
+    _procesar_actas_base(actuacion, item, incluir_comprobacion=False)
 
     if item.acta_comprobacion_num:
         anio = _anio_acta(item, None)
-        acta = _crear_acta_comprobacion(actuacion, item.acta_comprobacion_num, anio, "RATIFICA", True)
+        acta = _crear_acta_comprobacion(
+            actuacion, item.acta_comprobacion_num, anio, "RATIFICA", True
+        )
+        _vincular_comprobacion(actuacion, acta, "PREVIA")
         _crear_oficio(acta, item)
 
-    # Clausura previa: se registra como clausura actual pero respetando unicidad
     if item.acta_clausura_num:
         _crear_acta_clausura(actuacion, item)
 
 
 def _procesar_actas_verificar(actuacion: Actuacion, item: ActuacionItem) -> None:
-    _procesar_actas_inspeccion(actuacion, item)
+    _procesar_actas_base(actuacion, item)
 
     if item.comprobacion_previa_num:
         anio = _anio_acta(item, None)
-        _crear_acta_comprobacion(actuacion, item.comprobacion_previa_num, anio, "PREVIA", True)
+        acta = _crear_acta_comprobacion(
+            actuacion, item.comprobacion_previa_num, anio, "PREVIA", True
+        )
+        _vincular_comprobacion(actuacion, acta, "VERIFICAR")
 
 
 def crear_actuacion_desde_item(item: ActuacionItem) -> Actuacion:
@@ -454,7 +490,7 @@ def crear_actuacion_desde_item(item: ActuacionItem) -> Actuacion:
 
         tipo = item.tipo_actuacion
         if tipo == "INSPECCION":
-            _procesar_actas_inspeccion(actuacion, item)
+            _procesar_actas_base(actuacion, item)
         elif tipo == "REINSPECCION":
             _procesar_actas_reinspeccion(actuacion, item)
         elif tipo == "RATIFICACION":

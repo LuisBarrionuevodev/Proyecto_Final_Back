@@ -44,7 +44,10 @@ from pydantic import ValidationError
 from app.database import db
 from app.models import Actuacion, ActuacionComprobacion, ActuacionNotificacion
 from app.schemas.actuacion import ActuacionBatch
-from app.services.actuacion_service import ActuacionServiceError, crear_actuacion_desde_item
+from app.services.actuacion_service import (
+    ActuacionServiceError,
+    crear_actuacion_desde_item,
+)
 
 bp = Blueprint("actuaciones", __name__)
 
@@ -70,9 +73,7 @@ def _serializar_actuacion(actuacion: Actuacion) -> dict:
             rubro_nombre = (rubro_vigente or rubros[0]).rubro.nombre
 
     notificaciones_por_id = {n.id: n for n in actuacion.actas_notificacion}
-    links_notif = ActuacionNotificacion.query.filter_by(
-        actuacion_id=actuacion.id
-    ).all()
+    links_notif = ActuacionNotificacion.query.filter_by(actuacion_id=actuacion.id).all()
     notificacion_previa = None
     notificacion_actual = None
     for link in links_notif:
@@ -105,7 +106,9 @@ def _serializar_actuacion(actuacion: Actuacion) -> dict:
         if "PREVIA" not in contexto and comprobacion_actual is None:
             comprobacion_actual = comp
     if not comprobacion_actual and links_comp:
-        comprobacion_actual = comprobaciones_por_id.get(links_comp[0].acta_comprobacion_id)
+        comprobacion_actual = comprobaciones_por_id.get(
+            links_comp[0].acta_comprobacion_id
+        )
 
     oficio = (
         comprobacion_actual.oficios[0]
@@ -115,7 +118,9 @@ def _serializar_actuacion(actuacion: Actuacion) -> dict:
 
     return {
         "id": actuacion.id,
-        "orden_trabajo_numero": actuacion.orden_trabajo.numero if actuacion.orden_trabajo else None,
+        "orden_trabajo_numero": actuacion.orden_trabajo.numero
+        if actuacion.orden_trabajo
+        else None,
         "fecha_actuacion": actuacion.fecha.isoformat() if actuacion.fecha else None,
         "rubro_nombre": rubro_nombre,
         "inspectores": inspectores,
@@ -123,36 +128,60 @@ def _serializar_actuacion(actuacion: Actuacion) -> dict:
         "numero": domicilio.numero if domicilio else "",
         "tipo_actuacion": actuacion.tipo,
         "contraproducencia": actuacion.contraproducencia,
-        "doc_tipo_codigo": contrib.doc_tipo.codigo if contrib and contrib.doc_tipo else None,
+        "doc_tipo_codigo": contrib.doc_tipo.codigo
+        if contrib and contrib.doc_tipo
+        else None,
         "doc_nro": contrib.doc_nro if contrib else None,
         "contrib_apellido": contrib.apellido if contrib else None,
         "contrib_nombre": contrib.nombre if contrib else None,
         "acta_inspeccion_num": actuacion.acta_inspeccion.numero_acta
         if actuacion.acta_inspeccion
         else None,
-        "acta_notificacion_num": notificacion_actual.numero_acta if notificacion_actual else None,
-        "notificacion_motivo_1": motivos_notificacion[0] if len(motivos_notificacion) > 0 else None,
-        "notificacion_motivo_2": motivos_notificacion[1] if len(motivos_notificacion) > 1 else None,
-        "notificacion_motivo_3": motivos_notificacion[2] if len(motivos_notificacion) > 2 else None,
-        "acta_comprobacion_num": comprobacion_actual.numero_acta if comprobacion_actual else None,
-        "comprobacion_motivo": comprobacion_actual.observaciones if comprobacion_actual else None,
+        "acta_notificacion_num": notificacion_actual.numero_acta
+        if notificacion_actual
+        else None,
+        "notificacion_motivo_1": motivos_notificacion[0]
+        if len(motivos_notificacion) > 0
+        else None,
+        "notificacion_motivo_2": motivos_notificacion[1]
+        if len(motivos_notificacion) > 1
+        else None,
+        "notificacion_motivo_3": motivos_notificacion[2]
+        if len(motivos_notificacion) > 2
+        else None,
+        "acta_comprobacion_num": comprobacion_actual.numero_acta
+        if comprobacion_actual
+        else None,
+        "comprobacion_motivo": comprobacion_actual.observaciones
+        if comprobacion_actual
+        else None,
         "acta_clausura_num": actuacion.acta_clausura.numero_acta
         if actuacion.acta_clausura
         else None,
-        "clausura_motivo": actuacion.acta_clausura.observaciones if actuacion.acta_clausura else None,
+        "clausura_motivo": actuacion.acta_clausura.observaciones
+        if actuacion.acta_clausura
+        else None,
         "acta_decomiso_num": actuacion.acta_decomiso.numero_acta
         if actuacion.acta_decomiso
         else None,
         "decomiso_kilos_total": float(actuacion.acta_decomiso.cantidad)
         if actuacion.acta_decomiso and actuacion.acta_decomiso.cantidad is not None
         else None,
-        "expediente_numero": actuacion.expediente.numero_expediente if actuacion.expediente else None,
-        "expediente_anio": int(actuacion.expediente.anio) if actuacion.expediente else None,
+        "expediente_numero": actuacion.expediente.numero_expediente
+        if actuacion.expediente
+        else None,
+        "expediente_anio": int(actuacion.expediente.anio)
+        if actuacion.expediente
+        else None,
         "oficio_numero": oficio.numero_oficio if oficio else None,
         "oficio_anio": int(oficio.anio) if oficio else None,
         "oficio_causa": oficio.causa if oficio else None,
-        "notificacion_previa_num": notificacion_previa.numero_acta if notificacion_previa else None,
-        "comprobacion_previa_num": comprobacion_previa.numero_acta if comprobacion_previa else None,
+        "notificacion_previa_num": notificacion_previa.numero_acta
+        if notificacion_previa
+        else None,
+        "comprobacion_previa_num": comprobacion_previa.numero_acta
+        if comprobacion_previa
+        else None,
     }
 
 
@@ -194,13 +223,19 @@ def crear_actuaciones():
                 respuesta["inspectores"] = item.inspectores
                 actuaciones_creadas.append(respuesta)
 
-        return jsonify(actuaciones_creadas if len(actuaciones_creadas) > 1 else actuaciones_creadas[0]), 201
+        return jsonify(
+            actuaciones_creadas
+            if len(actuaciones_creadas) > 1
+            else actuaciones_creadas[0]
+        ), 201
     except ActuacionServiceError as e:
         db.session.rollback()
         return jsonify({"detail": str(e)}), 400
     except Exception as e:  # pragma: no cover - log interno
         db.session.rollback()
         return (
-            jsonify({"detail": "Error interno al guardar la actuación", "error": str(e)}),
+            jsonify(
+                {"detail": "Error interno al guardar la actuación", "error": str(e)}
+            ),
             500,
         )

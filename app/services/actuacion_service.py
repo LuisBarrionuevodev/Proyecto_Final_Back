@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+from datetime import date
 from typing import Iterable, Optional
 
 from sqlalchemy import func, select
@@ -34,6 +36,8 @@ from app.models import (
     Rubro,
 )
 from app.schemas.actuacion import ActuacionItem
+
+logger = logging.getLogger(__name__)
 
 
 class ActuacionServiceError(Exception):
@@ -113,65 +117,92 @@ def _get_or_create_rubro(nombre: str) -> Rubro:
 def _get_or_create_establecimiento(contribuyente: Contribuyente) -> Establecimiento:
     """
     Un contribuyente puede tener varios establecimientos, pero por ahora
-    asumimos un establecimiento base por contribuyente si no tenemos más datos.
+    usamos un establecimiento base por contribuyente:
+    - si ya existe alguno, lo reutilizamos;
+    - si no, creamos uno nuevo con un nombre NO nulo.
     """
     stmt = select(Establecimiento).filter_by(contribuyente_id=contribuyente.id)
     existente = db.session.execute(stmt).scalar_one_or_none()
     if existente:
         return existente
 
-    # Solo seteamos lo mínimo seguro; el resto que lo manejen defaults/nullables
-    est = Establecimiento(
+    apellido = (contribuyente.apellido or "").strip().upper()
+    nombre = (contribuyente.nombre or "").strip().upper()
+
+    if apellido and nombre:
+        nombre_est = f"{apellido} {nombre}"
+    else:
+        nombre_est = apellido or nombre or "SIN NOMBRE"
+
+    nuevo = Establecimiento(
         contribuyente_id=contribuyente.id,
+        nombre=nombre_est,
     )
-    db.session.add(est)
+    db.session.add(nuevo)
     db.session.flush()
-    return est
+    return nuevo
+
+
+...
 
 
 def _asegurar_establecimiento_rubro(
-    establecimiento: Establecimiento, rubro: Rubro
-) -> None:
+    establecimiento: Establecimiento,
+    rubro: Rubro,
+    fecha_desde: date,
+) -> EstablecimientoRubro:
     """
-    Vincula el establecimiento con el rubro en la tabla puente si no existe.
+    Vincula establecimiento con rubro en la tabla puente.
+    Setea fecha_desde (NOT NULL en la BD).
     """
-    stmt = select(EstablecimientoRubro).filter_by(
-        establecimiento_id=establecimiento.id,
-        rubro_id=rubro.id,
-    )
-    existente = db.session.execute(stmt).scalar_one_or_none()
-    if existente:
-        return
-
-    er = EstablecimientoRubro(
-        establecimiento_id=establecimiento.id,
-        rubro_id=rubro.id,
-    )
-    db.session.add(er)
-    db.session.flush()
-
-
-def _asegurar_establecimiento_domicilio(
-    establecimiento: Establecimiento, domicilio: Domicilio
-) -> EstablecimientoDomicilio:
-    """
-    Crea (o reutiliza) el vínculo establecimiento ↔ domicilio.
-    """
-    stmt = select(EstablecimientoDomicilio).filter_by(
-        establecimiento_id=establecimiento.id,
-        domicilio_id=domicilio.id,
-    )
-    existente = db.session.execute(stmt).scalar_one_or_none()
+    existente = db.session.execute(
+        select(EstablecimientoRubro).filter_by(
+            establecimiento_id=establecimiento.id,
+            rubro_id=rubro.id,
+        )
+    ).scalar_one_or_none()
     if existente:
         return existente
 
-    ed = EstablecimientoDomicilio(
+    vinculo = EstablecimientoRubro(
+        establecimiento_id=establecimiento.id,
+        rubro_id=rubro.id,
+        fecha_desde=fecha_desde,
+        fecha_hasta=None,
+    )
+    db.session.add(vinculo)
+    db.session.flush()
+    return vinculo
+
+
+def _asegurar_establecimiento_domicilio(
+    establecimiento: Establecimiento,
+    domicilio: Domicilio,
+    fecha_desde: date,
+) -> EstablecimientoDomicilio:
+    """
+    Crea (si hace falta) el vínculo establecimiento ↔ domicilio
+    y devuelve ese EstablecimientoDomicilio para usarlo en la actuación.
+    Setea fecha_desde (NOT NULL en la BD).
+    """
+    existente = db.session.execute(
+        select(EstablecimientoDomicilio).filter_by(
+            establecimiento_id=establecimiento.id,
+            domicilio_id=domicilio.id,
+        )
+    ).scalar_one_or_none()
+    if existente:
+        return existente
+
+    vinculo = EstablecimientoDomicilio(
         establecimiento_id=establecimiento.id,
         domicilio_id=domicilio.id,
+        fecha_desde=fecha_desde,
+        fecha_hasta=None,
     )
-    db.session.add(ed)
+    db.session.add(vinculo)
     db.session.flush()
-    return ed
+    return vinculo
 
 
 # ==========================
@@ -656,10 +687,8 @@ def crear_actuacion_desde_item(item: ActuacionItem) -> Actuacion:
         # 1) Orden de trabajo
         ot = _get_or_create_orden_trabajo(item.orden_trabajo_numero)
 
-        # 2) Documento tipo
+        # 2) Contribuyente
         doc_tipo = _get_or_create_documento_tipo(item.doc_tipo_codigo)
-
-        # 3) Contribuyente
         contrib = _get_or_create_contribuyente(
             doc_tipo,
             item.doc_nro,
@@ -667,30 +696,38 @@ def crear_actuacion_desde_item(item: ActuacionItem) -> Actuacion:
             item.contrib_nombre,
         )
 
-        # 4) Rubro
+        # 3) Rubro
         rubro = _get_or_create_rubro(item.rubro_nombre)
 
-        # 5) Domicilio (puntual de la actuación)
+        # 4) Domicilio (de la actuación)
         domicilio = _crear_domicilio(item.calle, item.numero)
 
-        # 6) Establecimiento asociado al contribuyente
+        # 5) Establecimiento asociado al contribuyente
         establecimiento = _get_or_create_establecimiento(contrib)
 
-        # 7) Vincular establecimiento ↔ rubro
-        _asegurar_establecimiento_rubro(establecimiento, rubro)
+        # 6) Vincular establecimiento ↔ rubro (con fecha_desde)
+        _asegurar_establecimiento_rubro(
+            establecimiento,
+            rubro,
+            item.fecha_actuacion,
+        )
 
-        # 8) Vincular establecimiento ↔ domicilio
-        est_dom = _asegurar_establecimiento_domicilio(establecimiento, domicilio)
+        # 7) Vincular establecimiento ↔ domicilio (con fecha_desde)
+        est_dom = _asegurar_establecimiento_domicilio(
+            establecimiento,
+            domicilio,
+            item.fecha_actuacion,
+        )
 
-        # 9) Crear actuación apuntando al establecimiento_domicilio
+        # 8) Crear actuación apuntando al establecimiento_domicilio
         actuacion = _crear_actuacion(item, ot, est_dom)
 
-        # 10) Inspectores
+        # 9) Inspectores
         for inspector_nombre in item.inspectores:
             inspector = _get_or_create_inspector(inspector_nombre)
             _asegurar_actuacion_inspector(actuacion, inspector)
 
-        # 11) Actas según tipo de actuación
+        # 10) Actas según tipo de actuación
         tipo = item.tipo_actuacion
         if tipo == "INSPECCION":
             _procesar_actas_base(actuacion, item)
@@ -703,12 +740,14 @@ def crear_actuacion_desde_item(item: ActuacionItem) -> Actuacion:
         else:
             raise ActuacionServiceError(f"Tipo de actuación no soportado: {tipo}")
 
-        # 12) Expediente (opcional)
+        # 11) Crear expediente (si viene)
         _crear_expediente(actuacion, item)
 
         return actuacion
 
     except IntegrityError as exc:
+        detalle_db = str(getattr(exc, "orig", exc))
+        # si tenés logger, lo usás acá
         raise ActuacionServiceError(
-            "Error de integridad al persistir la actuación"
+            f"Error de integridad al persistir la actuación: {detalle_db}"
         ) from exc

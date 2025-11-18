@@ -7,6 +7,7 @@ import {
 } from "material-react-table";
 import { useState } from "react";
 import { Box, Typography } from "@mui/material";
+import axios from "axios"; // 👈 NUEVO
 
 import { createActuacion } from "../../../api/actuacionesApi";
 import { TABLE_CREAR_ACTUACIONES } from "../../../constants/tableConfig";
@@ -46,10 +47,9 @@ const TablaCargarActuaciones = () => {
   /*
     Ejemplo de payload que se envía al backend desde esta tabla (se envía un solo
     objeto y el backend lo envuelve como {"items": [obj]}):
-
     {
       "orden_trabajo_numero": "000123",
-      "fecha_actuacion": "2024-06-01", // normalizada desde DD/MM/YY
+      "fecha_actuacion": "2024-06-01",
       "rubro_nombre": "ALIMENTOS",
       "inspectores": ["INSPECTOR UNO", "INSPECTOR DOS"],
       "calle": "SARMIENTO",
@@ -136,7 +136,15 @@ const TablaCargarActuaciones = () => {
           table.setCreatingRow(true);
         }, 50);
       } catch (error) {
-        console.error("Error al crear actuación:", error);
+        if (axios.isAxiosError(error)) {
+          console.error(
+            "Error al crear actuación (backend):",
+            error.response?.status,
+            error.response?.data
+          );
+        } else {
+          console.error("Error al crear actuación (desconocido):", error);
+        }
       }
     };
 

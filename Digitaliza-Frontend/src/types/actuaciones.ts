@@ -37,3 +37,13 @@ export interface IActuacion {
   notificacion_previa_num?: string;
   comprobacion_previa_num?: string;
 }
+
+export interface IActuacionListado {
+  id: number;
+  fecha_actuacion: string;
+  tipo_actuacion: "INSPECCION" | "REINSPECCION" | "RATIFICACION" | "VERIFICAR E INFORMAR";
+  orden_trabajo_numero: string | null;
+  establecimiento_domicilio_id: number | null;
+  created_at: string;
+  updated_at: string;
+}

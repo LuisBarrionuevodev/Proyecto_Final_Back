@@ -1,169 +1,61 @@
 import { Box, Typography, IconButton, Tooltip } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
-import { MaterialReactTable, useMaterialReactTable, type MRT_ColumnDef, } from "material-react-table";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  MaterialReactTable,
+  useMaterialReactTable,
+  type MRT_ColumnDef,
+} from "material-react-table";
+import { useCallback, useMemo } from "react";
 import { BASE_TABLE_CONFIG } from "../../../constants/tableConfig";
-import type { IActuacion } from "../../../types/actuaciones";
+import type { IActuacionListado } from "../../../types/actuaciones";
 import {
   TableGeneralStyles,
   TableLoadingStyles,
   TableTitleStyles,
 } from "../../../styles/TablasStyle";
 import { useGestionActuaciones } from "../../../hooks/useGestionActuaciones";
-import { deleteActuacion, updateActuacion } from "../../../api/actuacionesApi";
+import { deleteActuacion } from "../../../api/actuacionesApi";
 import { TablaExportButtons } from "./TableButtons";
 
 const TablaActuaciones = () => {
-
   const { actuaciones, setActuaciones, loading } = useGestionActuaciones();
-  const [data, setData] = useState<IActuacion[]>([]);
-  const [validationErrors] = useState<Record<number, Record<string, string>>>({});
 
-  useEffect(() => {
-    setData(actuaciones ?? []);
-  }, [actuaciones]);
+  const handleDeleteRow = useCallback(
+    async (id: number) => {
+      if (!window.confirm("¿Estás seguro de eliminar este registro?")) return;
 
-  const handleDeleteRow = useCallback(async (id: number) => {
-    if (!window.confirm("¿Estás seguro de eliminar este registro?")) return;
-    const prev = data;
-    setData(prev => prev.filter(item => item.id !== id));
-    setActuaciones(prev => prev.filter(item => item.id !== id)); // si querés sync local
-    try {
-      await deleteActuacion(id);
-    } catch (error) {
-      console.error("Error al eliminar:", error);
-      alert("No se pudo eliminar el registro. Se restaurará la lista.");
-      setData(prev);
-      setActuaciones(prev);
-    }
-  }, [data, setActuaciones]);
-
-  const handleEditCell = useCallback(
-    async (id: number, key: keyof IActuacion, value: any) => {
-      let updatedRow: IActuacion | undefined;
-      setData((prev) => {
-        const idx = prev.findIndex((r) => r.id === id);
-        if (idx === -1) return prev;
-        updatedRow = { ...prev[idx], [key]: value }; // guardamos fila actualizada
-        const newData = [...prev];
-        newData[idx] = updatedRow!;
-        return newData;
-      });
-
-      if (!updatedRow) return;
-
-      const payload: IActuacion = {
-        id: updatedRow.id!,
-        rubro: updatedRow.rubro,
-        distrito: Number(updatedRow.distrito ?? 0),
-        inspector1: updatedRow.inspector1?.trim() || "",
-        inspector2: updatedRow.inspector2?.trim() || "",
-        inspector3: updatedRow.inspector3?.trim() || "",
-        direccion: updatedRow.direccion?.trim() || "",
-        clausuras: Number(updatedRow.clausuras ?? 0),
-      };
-
-      //  Validación 
-      if (!payload.rubro || !payload.direccion || payload.distrito <= 0 || payload.clausuras < 0) {
-        alert("Algunos campos no son válidos. Corrigelos antes de guardar.");
-        return;
-      }
-
-      // Llamada Axios
       try {
-        await updateActuacion(id, payload);
+        await deleteActuacion(id);
+        setActuaciones((prev) => prev.filter((item) => item.id !== id));
       } catch (error) {
-        console.error("Error al actualizar:", error);
-        alert("No se pudo actualizar el registro.");
+        console.error("Error al eliminar:", error);
+        alert("No se pudo eliminar el registro.");
       }
     },
-    []
+    [setActuaciones],
   );
 
-
-  const columns = useMemo<MRT_ColumnDef<IActuacion>[]>(() => [
-    {
-      accessorKey: "id",
-      header: "ID",
-      enableHiding: true,
-      enableEditing: false,
-      enableClickToCopy: true,
-    },
-    {
-      accessorKey: "rubro",
-      header: "Rubro",
-      muiEditTextFieldProps: ({ row }) => ({
-        error: !!validationErrors[row.original.id]?.rubro,
-        helperText: validationErrors[row.original.id]?.rubro,
-        onBlur: (e) => handleEditCell(row.original.id, "rubro", e.target.value),
-      })
-    },
-    {
-      accessorKey: "distrito",
-      header: "Distrito",
-      muiEditTextFieldProps: ({ row }) => ({
-        type: "number",
-        error: !!validationErrors[row.original.id]?.distrito,
-        helperText: validationErrors[row.original.id]?.distrito,
-        onBlur: (e) => handleEditCell(row.original.id, "distrito", Number(e.target.value)),
-      }),
-    },
-    {
-      accessorKey: "inspector1",
-      header: "Inspector-1",
-      muiEditTextFieldProps: ({ row }) => ({
-        error: !!validationErrors[row.original.id]?.inspector1,
-        helperText: validationErrors[row.original.id]?.inspector1,
-        onBlur: (e) => handleEditCell(row.original.id, "inspector1", e.target.value),
-      }),
-    },
-    {
-      accessorKey: "inspector2",
-      header: "Inspector-2",
-      muiEditTextFieldProps: ({ row }) => ({
-        error: !!validationErrors[row.original.id]?.inspector2,
-        helperText: validationErrors[row.original.id]?.inspector2,
-        onBlur: (e) => handleEditCell(row.original.id, "inspector2", e.target.value),
-      }),
-    },
-    {
-      accessorKey: "inspector3",
-      header: "Inspector-3",
-      muiEditTextFieldProps: ({ row }) => ({
-        error: !!validationErrors[row.original.id]?.inspector3,
-        helperText: validationErrors[row.original.id]?.inspector3,
-        onBlur: (e) => handleEditCell(row.original.id, "inspector3", e.target.value),
-      }),
-    },
-    {
-      accessorKey: "direccion",
-      header: "Dirección",
-      muiEditTextFieldProps: ({ row }) => ({
-        error: !!validationErrors[row.original.id]?.direccion,
-        helperText: validationErrors[row.original.id]?.direccion,
-        onBlur: (e) => handleEditCell(row.original.id, "direccion", e.target.value),
-      }),
-    },
-    {
-      accessorKey: "clausuras",
-      header: "Clausuras",
-      muiEditTextFieldProps: ({ row }) => ({
-        type: "number",
-        error: !!validationErrors[row.original.id]?.clausuras,
-        helperText: validationErrors[row.original.id]?.clausuras,
-        onBlur: (e) => handleEditCell(row.original.id, "clausuras", Number(e.target.value)),
-      }),
-    },
-  ], [validationErrors])
+  const columns = useMemo<MRT_ColumnDef<IActuacionListado>[]>(
+    () => [
+      { accessorKey: "id", header: "ID", enableEditing: false },
+      { accessorKey: "fecha_actuacion", header: "Fecha actuación" },
+      { accessorKey: "tipo_actuacion", header: "Tipo" },
+      { accessorKey: "orden_trabajo_numero", header: "OT" },
+      {
+        accessorKey: "establecimiento_domicilio_id",
+        header: "Estab./Domicilio ID",
+      },
+      { accessorKey: "created_at", header: "Creado" },
+      { accessorKey: "updated_at", header: "Actualizado" },
+    ],
+    [],
+  );
 
   const table = useMaterialReactTable({
     ...BASE_TABLE_CONFIG,
     columns,
-    data,
+    data: actuaciones,
     enableRowActions: true,
-    initialState: {
-      columnVisibility: { id: false },
-    },
     renderRowActions: ({ row }) => (
       <Box sx={{ display: "flex", gap: "0.5rem" }}>
         <Tooltip title="Eliminar">
@@ -174,7 +66,7 @@ const TablaActuaciones = () => {
       </Box>
     ),
     renderTopToolbarCustomActions: ({ table }) => (
-      <TablaExportButtons data={data} table={table} />
+      <TablaExportButtons data={actuaciones} table={table} />
     ),
   });
 

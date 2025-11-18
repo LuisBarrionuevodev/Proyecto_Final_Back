@@ -52,6 +52,22 @@ from app.services.actuacion_service import (
 bp = Blueprint("actuaciones", __name__)
 
 
+def _serializar_actuacion_resumen(actuacion: Actuacion) -> dict:
+    """Serializa los campos mínimos para el listado de actuaciones."""
+
+    return {
+        "id": actuacion.id,
+        "fecha_actuacion": actuacion.fecha.isoformat() if actuacion.fecha else None,
+        "tipo_actuacion": actuacion.tipo,
+        "orden_trabajo_numero": actuacion.orden_trabajo.numero
+        if actuacion.orden_trabajo
+        else None,
+        "establecimiento_domicilio_id": actuacion.establecimiento_domicilio_id,
+        "created_at": actuacion.created_at.isoformat() if actuacion.created_at else None,
+        "updated_at": actuacion.updated_at.isoformat() if actuacion.updated_at else None,
+    }
+
+
 def _serializar_actuacion(actuacion: Actuacion) -> dict:
     """Convierte el modelo en un dict listo para el front."""
 
@@ -188,7 +204,31 @@ def _serializar_actuacion(actuacion: Actuacion) -> dict:
 @bp.get("")
 def listar_actuaciones():
     actuaciones = Actuacion.query.all()
-    return jsonify([_serializar_actuacion(a) for a in actuaciones]), 200
+    return jsonify([_serializar_actuacion_resumen(a) for a in actuaciones]), 200
+
+
+@bp.delete("/<int:actuacion_id>")
+def eliminar_actuacion(actuacion_id: int):
+    actuacion = Actuacion.query.get(actuacion_id)
+    if not actuacion:
+        return jsonify({"detail": "Actuación no encontrada"}), 404
+
+    try:
+        with db.session.begin():
+            db.session.delete(actuacion)
+    except Exception as e:
+        db.session.rollback()
+        return (
+            jsonify(
+                {
+                    "detail": "No se pudo eliminar la actuación",
+                    "error": str(e),
+                }
+            ),
+            400,
+        )
+
+    return "", 204
 
 
 @bp.post("")

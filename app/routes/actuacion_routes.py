@@ -40,6 +40,7 @@
 
 from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 
 from app.database import db
 from app.models import Actuacion, ActuacionComprobacion, ActuacionNotificacion
@@ -63,8 +64,12 @@ def _serializar_actuacion_resumen(actuacion: Actuacion) -> dict:
         if actuacion.orden_trabajo
         else None,
         "establecimiento_domicilio_id": actuacion.establecimiento_domicilio_id,
-        "created_at": actuacion.created_at.isoformat() if actuacion.created_at else None,
-        "updated_at": actuacion.updated_at.isoformat() if actuacion.updated_at else None,
+        "created_at": actuacion.created_at.isoformat()
+        if actuacion.created_at
+        else None,
+        "updated_at": actuacion.updated_at.isoformat()
+        if actuacion.updated_at
+        else None,
     }
 
 
@@ -209,26 +214,46 @@ def listar_actuaciones():
 
 @bp.delete("/<int:actuacion_id>")
 def eliminar_actuacion(actuacion_id: int):
+    """DELETE /api/v1/actuaciones/<id>: elimina una actuación.
+
+    - 204 si se eliminó bien
+    - 404 si no existe
+    - 409 si hay error de integridad (FK)
+    - 500 para otros errores inesperados
+    """
     actuacion = Actuacion.query.get(actuacion_id)
     if not actuacion:
         return jsonify({"detail": "Actuación no encontrada"}), 404
 
     try:
-        with db.session.begin():
-            db.session.delete(actuacion)
+        db.session.delete(actuacion)
+        db.session.commit()
+        return "", 204
+
+    except IntegrityError as e:
+        db.session.rollback()
+        # Muy probablemente un "Cannot delete or update a parent row: a foreign key constraint fails"
+        return (
+            jsonify(
+                {
+                    "detail": "No se pudo eliminar la actuación porque tiene registros relacionados (actas, expedientes, etc.)",
+                    "error": str(e),
+                }
+            ),
+            409,
+        )
+
     except Exception as e:
         db.session.rollback()
         return (
             jsonify(
                 {
-                    "detail": "No se pudo eliminar la actuación",
+                    "detail": "Error interno al intentar eliminar la actuación",
                     "error": str(e),
                 }
             ),
-            400,
+            500,
         )
-
-    return "", 204
 
 
 @bp.post("")

@@ -1,0 +1,160 @@
+{
+  "hash": "5958df7b",
+  "configHash": "d345d40e",
+  "lockfileHash": "024d0527",
+  "browserHash": "fe424935",
+  "optimized": {
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "16b6478b",
+      "needsInterop": true
+    },
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "3462df51",
+      "needsInterop": true
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "785bc3ae",
+      "needsInterop": true
+    },
+    "@mui/material/styles": {
+      "src": "../../node_modules/@mui/material/esm/styles/index.js",
+      "file": "@mui_material_styles.js",
+      "fileHash": "25dad286",
+      "needsInterop": false
+    },
+    "react-router-dom": {
+      "src": "../../node_modules/react-router-dom/dist/index.mjs",
+      "file": "react-router-dom.js",
+      "fileHash": "32aa4ef7",
+      "needsInterop": false
+    },
+    "@emotion/react": {
+      "src": "../../node_modules/@emotion/react/dist/emotion-react.browser.development.esm.js",
+      "file": "@emotion_react.js",
+      "fileHash": "6eb22cf7",
+      "needsInterop": false
+    },
+    "@mui/material": {
+      "src": "../../node_modules/@mui/material/esm/index.js",
+      "file": "@mui_material.js",
+      "fileHash": "bd6b8c07",
+      "needsInterop": false
+    },
+    "@mui/icons-material/KeyboardDoubleArrowRight": {
+      "src": "../../node_modules/@mui/icons-material/esm/KeyboardDoubleArrowRight.js",
+      "file": "@mui_icons-material_KeyboardDoubleArrowRight.js",
+      "fileHash": "0667868a",
+      "needsInterop": false
+    },
+    "@mui/icons-material/KeyboardDoubleArrowLeft": {
+      "src": "../../node_modules/@mui/icons-material/esm/KeyboardDoubleArrowLeft.js",
+      "file": "@mui_icons-material_KeyboardDoubleArrowLeft.js",
+      "fileHash": "6212dca2",
+      "needsInterop": false
+    },
+    "material-react-table": {
+      "src": "../../node_modules/material-react-table/dist/index.esm.js",
+      "file": "material-react-table.js",
+      "fileHash": "120d4a44",
+      "needsInterop": false
+    },
+    "@mui/icons-material/Delete": {
+      "src": "../../node_modules/@mui/icons-material/esm/Delete.js",
+      "file": "@mui_icons-material_Delete.js",
+      "fileHash": "82ba1914",
+      "needsInterop": false
+    },
+    "@mui/icons-material/NoteAdd": {
+      "src": "../../node_modules/@mui/icons-material/esm/NoteAdd.js",
+      "file": "@mui_icons-material_NoteAdd.js",
+      "fileHash": "529e4591",
+      "needsInterop": false
+    },
+    "@mui/icons-material/Dashboard": {
+      "src": "../../node_modules/@mui/icons-material/esm/Dashboard.js",
+      "file": "@mui_icons-material_Dashboard.js",
+      "fileHash": "e48fdfc1",
+      "needsInterop": false
+    },
+    "@mui/icons-material/BarChart": {
+      "src": "../../node_modules/@mui/icons-material/esm/BarChart.js",
+      "file": "@mui_icons-material_BarChart.js",
+      "fileHash": "54112009",
+      "needsInterop": false
+    },
+    "@mui/icons-material/Map": {
+      "src": "../../node_modules/@mui/icons-material/esm/Map.js",
+      "file": "@mui_icons-material_Map.js",
+      "fileHash": "5fc6141c",
+      "needsInterop": false
+    },
+    "@mui/icons-material/CreateNewFolder": {
+      "src": "../../node_modules/@mui/icons-material/esm/CreateNewFolder.js",
+      "file": "@mui_icons-material_CreateNewFolder.js",
+      "fileHash": "5d1c4ac3",
+      "needsInterop": false
+    },
+    "axios": {
+      "src": "../../node_modules/axios/index.js",
+      "file": "axios.js",
+      "fileHash": "504345a2",
+      "needsInterop": false
+    },
+    "recharts": {
+      "src": "../../node_modules/recharts/es6/index.js",
+      "file": "recharts.js",
+      "fileHash": "ccf0e201",
+      "needsInterop": false
+    },
+    "@mui/icons-material/FileDownload": {
+      "src": "../../node_modules/@mui/icons-material/esm/FileDownload.js",
+      "file": "@mui_icons-material_FileDownload.js",
+      "fileHash": "f623200c",
+      "needsInterop": false
+    },
+    "export-to-csv": {
+      "src": "../../node_modules/export-to-csv/output/index.js",
+      "file": "export-to-csv.js",
+      "fileHash": "82b3a0f3",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-E6YL2CX5": {
+      "file": "chunk-E6YL2CX5.js"
+    },
+    "chunk-AOEG6YVM": {
+      "file": "chunk-AOEG6YVM.js"
+    },
+    "chunk-JF7IVAG4": {
+      "file": "chunk-JF7IVAG4.js"
+    },
+    "chunk-C6WWHQR7": {
+      "file": "chunk-C6WWHQR7.js"
+    },
+    "chunk-CUZG4YHJ": {
+      "file": "chunk-CUZG4YHJ.js"
+    },
+    "chunk-DRSHPFSW": {
+      "file": "chunk-DRSHPFSW.js"
+    },
+    "chunk-RM4HXHU3": {
+      "file": "chunk-RM4HXHU3.js"
+    },
+    "chunk-XDFQZUT6": {
+      "file": "chunk-XDFQZUT6.js"
+    },
+    "chunk-4BPZ7PBZ": {
+      "file": "chunk-4BPZ7PBZ.js"
+    },
+    "chunk-G3PMV62Z": {
+      "file": "chunk-G3PMV62Z.js"
+    }
+  }
+}

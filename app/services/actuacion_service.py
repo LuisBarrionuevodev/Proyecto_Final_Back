@@ -345,19 +345,30 @@ def _vincular_notificacion(
 
 
 def _crear_acta_comprobacion(
-    actuacion: Actuacion, numero: str, anio: int, contexto: str, marcada_doble: bool
+    actuacion: Actuacion,
+    numero: str,
+    anio: int,
+    contexto: str,
+    marcada_doble: bool,
+    observaciones: Optional[str],
 ) -> ActaComprobacion:
     acta = db.session.execute(
         select(ActaComprobacion).filter_by(numero_acta=numero, anio=anio)
     ).scalar_one_or_none()
     if not acta:
         acta = ActaComprobacion(
-            numero_acta=numero, anio=anio, actuada_dos_veces=marcada_doble
+            numero_acta=numero,
+            anio=anio,
+            actuada_dos_veces=marcada_doble,
+            observaciones=observaciones,
         )
         db.session.add(acta)
         db.session.flush()
-    elif marcada_doble:
-        acta.actuada_dos_veces = True
+    else:
+        if marcada_doble:
+            acta.actuada_dos_veces = True
+        if observaciones:
+            acta.observaciones = observaciones
 
     _vincular_comprobacion(actuacion, acta, contexto)
     if marcada_doble and not acta.actuada_dos_veces:
@@ -475,17 +486,20 @@ def _crear_expediente(actuacion: Actuacion, item: ActuacionItem) -> None:
             observaciones = db.Column(db.Text, nullable=True)
     """
 
+    numero_expediente = (item.expediente_numero or "").strip()
+    anio = item.expediente_anio
+
     # Si no viene número o año, no hacemos nada
-    if not item.expediente_numero or item.expediente_anio is None:
+    if not numero_expediente or anio is None:
         return
 
-    anio = int(item.expediente_anio)
+    anio_int = int(anio)
 
     existente = db.session.execute(
         select(Expediente).filter_by(
             actuacion_id=actuacion.id,
-            numero_expediente=item.expediente_numero,  # 👈 OJO: numero_expediente
-            anio=anio,
+            numero_expediente=numero_expediente,
+            anio=anio_int,
         )
     ).scalar_one_or_none()
 
@@ -493,8 +507,8 @@ def _crear_expediente(actuacion: Actuacion, item: ActuacionItem) -> None:
         return
 
     exp = Expediente(
-        numero_expediente=item.expediente_numero,  # 👈 coincide con el modelo
-        anio=anio,
+        numero_expediente=numero_expediente,
+        anio=anio_int,
         actuacion_id=actuacion.id,
         observaciones=None,
     )
@@ -551,13 +565,17 @@ def _procesar_actas_base(
     if incluir_comprobacion and item.acta_comprobacion_num:
         anio = _anio_acta(item, None)
         acta_comp_creada = _crear_acta_comprobacion(
-            actuacion, item.acta_comprobacion_num, anio, "DIA", False
+            actuacion,
+            item.acta_comprobacion_num,
+            anio,
+            "DIA",
+            False,
+            item.comprobacion_motivo,
         )
         _crear_oficio(acta_comp_creada, item)
 
     _crear_acta_clausura(actuacion, item)
     _crear_acta_decomiso(actuacion, item)
-    _crear_expediente(actuacion, item)
     return acta_comp_creada
 
 
@@ -598,7 +616,12 @@ def _procesar_actas_ratificacion(actuacion: Actuacion, item: ActuacionItem) -> N
     if item.acta_comprobacion_num:
         anio = _anio_acta(item, None)
         acta = _crear_acta_comprobacion(
-            actuacion, item.acta_comprobacion_num, anio, "RATIFICA", True
+            actuacion,
+            item.acta_comprobacion_num,
+            anio,
+            "RATIFICA",
+            True,
+            item.comprobacion_motivo,
         )
         _vincular_comprobacion(actuacion, acta, "PREVIA")
         _crear_oficio(acta, item)
@@ -613,7 +636,12 @@ def _procesar_actas_verificar(actuacion: Actuacion, item: ActuacionItem) -> None
     if item.comprobacion_previa_num:
         anio = _anio_acta(item, None)
         acta = _crear_acta_comprobacion(
-            actuacion, item.comprobacion_previa_num, anio, "PREVIA", True
+            actuacion,
+            item.comprobacion_previa_num,
+            anio,
+            "PREVIA",
+            True,
+            item.comprobacion_motivo,
         )
         _vincular_comprobacion(actuacion, acta, "VERIFICAR")
 
@@ -628,8 +656,10 @@ def crear_actuacion_desde_item(item: ActuacionItem) -> Actuacion:
         # 1) Orden de trabajo
         ot = _get_or_create_orden_trabajo(item.orden_trabajo_numero)
 
-        # 2) Contribuyente
+        # 2) Documento tipo
         doc_tipo = _get_or_create_documento_tipo(item.doc_tipo_codigo)
+
+        # 3) Contribuyente
         contrib = _get_or_create_contribuyente(
             doc_tipo,
             item.doc_nro,
@@ -637,30 +667,30 @@ def crear_actuacion_desde_item(item: ActuacionItem) -> Actuacion:
             item.contrib_nombre,
         )
 
-        # 3) Rubro
+        # 4) Rubro
         rubro = _get_or_create_rubro(item.rubro_nombre)
 
-        # 4) Domicilio (puntual de la actuación)
+        # 5) Domicilio (puntual de la actuación)
         domicilio = _crear_domicilio(item.calle, item.numero)
 
-        # 5) Establecimiento asociado al contribuyente
+        # 6) Establecimiento asociado al contribuyente
         establecimiento = _get_or_create_establecimiento(contrib)
 
-        # 6) Vincular establecimiento ↔ rubro
+        # 7) Vincular establecimiento ↔ rubro
         _asegurar_establecimiento_rubro(establecimiento, rubro)
 
-        # 7) Vincular establecimiento ↔ domicilio
+        # 8) Vincular establecimiento ↔ domicilio
         est_dom = _asegurar_establecimiento_domicilio(establecimiento, domicilio)
 
-        # 8) Crear actuación apuntando al establecimiento_domicilio
+        # 9) Crear actuación apuntando al establecimiento_domicilio
         actuacion = _crear_actuacion(item, ot, est_dom)
 
-        # 9) Inspectores
+        # 10) Inspectores
         for inspector_nombre in item.inspectores:
             inspector = _get_or_create_inspector(inspector_nombre)
             _asegurar_actuacion_inspector(actuacion, inspector)
 
-        # 🔟 Actas según tipo de actuación
+        # 11) Actas según tipo de actuación
         tipo = item.tipo_actuacion
         if tipo == "INSPECCION":
             _procesar_actas_base(actuacion, item)
@@ -672,6 +702,9 @@ def crear_actuacion_desde_item(item: ActuacionItem) -> Actuacion:
             _procesar_actas_verificar(actuacion, item)
         else:
             raise ActuacionServiceError(f"Tipo de actuación no soportado: {tipo}")
+
+        # 12) Expediente (opcional)
+        _crear_expediente(actuacion, item)
 
         return actuacion
 

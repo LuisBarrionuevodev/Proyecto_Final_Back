@@ -23,19 +23,48 @@ const isValidRealDate = (value: string) => {
 
 // Validaciones Actuaciones
 
-export const validateActuacion = (a: Partial<IActuacion>) => {
+const isValidInputDate = (value?: string) => {
+  if (!value) return false;
+  const patterns = [
+    /^\d{2}\/\d{2}\/\d{2}$/,
+    /^\d{2}\/\d{2}\/\d{4}$/,
+    /^\d{4}-\d{2}-\d{2}$/,
+  ];
+  return patterns.some((p) => p.test(value));
+};
+
+export const validateActuacion = (
+  a: Partial<IActuacion> & {
+    inspector1?: string;
+    inspector2?: string;
+    inspector3?: string;
+  },
+) => {
   const errors: Record<string, string | undefined> = {};
 
-  if (!isRequired(a.rubro)) errors.rubro = "Rubro requerido";
-  if (a.rubro && a.rubro.length > 20) errors.rubro = "Rubro demasiado largo";
-  if (!isNumber(a.distrito)) errors.distrito = "Distrito inválido";
-  if (a.distrito && (Number(a.distrito) < 1 || Number(a.distrito) > 10)) errors.distrito = "Distrito fuera de rango (1-10)";
-  if (!isRequired(a.inspector1)) errors.inspector1 = "Inspector requerido";
-  if (a.inspector1 && a.inspector1.length > 20) errors.inspector1 = "Nombre demasiado largo";
-  if (!isRequired(a.inspector2)) errors.inspector2 = "Inspector requerido";
-  if (!isRequired(a.inspector3)) errors.inspector3 = "Inspector requerido";
-  if (!isRequired(a.direccion)) errors.direccion = "Dirección requerida";
-  if (!isNumber(a.clausuras)) errors.clausuras = "Clausuras inválidas";
+  if (!isRequired(a.orden_trabajo_numero)) errors.orden_trabajo_numero = "OT requerida";
+  if (!isValidInputDate(a.fecha_actuacion)) errors.fecha_actuacion = "Fecha inválida";
+  if (!isRequired(a.rubro_nombre)) errors.rubro_nombre = "Rubro requerido";
+
+  const inspectores = (a.inspectores?.length ? a.inspectores : [
+    a.inspector1,
+    a.inspector2,
+    a.inspector3,
+  ])
+    .filter((v): v is string => Boolean(v && v.trim()))
+    .map((v) => v.trim());
+
+  if (!inspectores.length) {
+    errors.inspectores = "Indica al menos un inspector";
+    errors.inspector1 = errors.inspector1 || "Inspector requerido";
+  }
+
+  if (!isRequired(a.calle)) errors.calle = "Calle requerida";
+  if (!isRequired(a.numero)) errors.numero = "Número requerido";
+  if (!isRequired(a.tipo_actuacion)) errors.tipo_actuacion = "Tipo requerido";
+  if (!isRequired(a.doc_tipo_codigo)) errors.doc_tipo_codigo = "Tipo doc requerido";
+  if (!isRequired(a.doc_nro)) errors.doc_nro = "Documento requerido";
+  if (!isRequired(a.contrib_apellido)) errors.contrib_apellido = "Apellido requerido";
 
   return errors;
 };

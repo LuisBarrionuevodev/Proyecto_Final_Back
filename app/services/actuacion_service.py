@@ -20,6 +20,9 @@ from app.models import (
     Contribuyente,
     DocumentoTipo,
     Domicilio,
+    Establecimiento,
+    EstablecimientoDomicilio,
+    EstablecimientoRubro,
     Expediente,
     Inspector,
     MotivoClausura,
@@ -39,7 +42,6 @@ class ActuacionServiceError(Exception):
 
 def _anio_acta(item: ActuacionItem, anio_campo: Optional[int]) -> int:
     """Devuelve el año informado o deriva del año de la actuación."""
-
     return int(anio_campo or item.fecha_actuacion.year)
 
 
@@ -56,7 +58,9 @@ def _get_or_create_orden_trabajo(numero: str) -> OrdenTrabajo:
 
 
 def _get_or_create_documento_tipo(codigo: str) -> DocumentoTipo:
-    stmt = select(DocumentoTipo).filter(func.upper(DocumentoTipo.codigo) == codigo.upper())
+    stmt = select(DocumentoTipo).filter(
+        func.upper(DocumentoTipo.codigo) == codigo.upper()
+    )
     existente = db.session.execute(stmt).scalar_one_or_none()
     if existente:
         return existente
@@ -79,7 +83,10 @@ def _get_or_create_contribuyente(
         return existente
 
     nuevo = Contribuyente(
-        apellido=apellido or "", nombre=nombre or "", doc_tipo_id=doc_tipo.id, doc_nro=doc_nro
+        apellido=apellido or "",
+        nombre=nombre or "",
+        doc_tipo_id=doc_tipo.id,
+        doc_nro=doc_nro,
     )
     db.session.add(nuevo)
     db.session.flush()
@@ -96,6 +103,80 @@ def _get_or_create_rubro(nombre: str) -> Rubro:
     db.session.add(nuevo)
     db.session.flush()
     return nuevo
+
+
+# ==========================
+#   ESTABLECIMIENTO / RUBRO / DOMICILIO
+# ==========================
+
+
+def _get_or_create_establecimiento(contribuyente: Contribuyente) -> Establecimiento:
+    """
+    Un contribuyente puede tener varios establecimientos, pero por ahora
+    asumimos un establecimiento base por contribuyente si no tenemos más datos.
+    """
+    stmt = select(Establecimiento).filter_by(contribuyente_id=contribuyente.id)
+    existente = db.session.execute(stmt).scalar_one_or_none()
+    if existente:
+        return existente
+
+    # Solo seteamos lo mínimo seguro; el resto que lo manejen defaults/nullables
+    est = Establecimiento(
+        contribuyente_id=contribuyente.id,
+    )
+    db.session.add(est)
+    db.session.flush()
+    return est
+
+
+def _asegurar_establecimiento_rubro(
+    establecimiento: Establecimiento, rubro: Rubro
+) -> None:
+    """
+    Vincula el establecimiento con el rubro en la tabla puente si no existe.
+    """
+    stmt = select(EstablecimientoRubro).filter_by(
+        establecimiento_id=establecimiento.id,
+        rubro_id=rubro.id,
+    )
+    existente = db.session.execute(stmt).scalar_one_or_none()
+    if existente:
+        return
+
+    er = EstablecimientoRubro(
+        establecimiento_id=establecimiento.id,
+        rubro_id=rubro.id,
+    )
+    db.session.add(er)
+    db.session.flush()
+
+
+def _asegurar_establecimiento_domicilio(
+    establecimiento: Establecimiento, domicilio: Domicilio
+) -> EstablecimientoDomicilio:
+    """
+    Crea (o reutiliza) el vínculo establecimiento ↔ domicilio.
+    """
+    stmt = select(EstablecimientoDomicilio).filter_by(
+        establecimiento_id=establecimiento.id,
+        domicilio_id=domicilio.id,
+    )
+    existente = db.session.execute(stmt).scalar_one_or_none()
+    if existente:
+        return existente
+
+    ed = EstablecimientoDomicilio(
+        establecimiento_id=establecimiento.id,
+        domicilio_id=domicilio.id,
+    )
+    db.session.add(ed)
+    db.session.flush()
+    return ed
+
+
+# ==========================
+#   INSPECTORES / DOMICILIO
+# ==========================
 
 
 def _next_inspector_legajo() -> int:
@@ -131,15 +212,26 @@ def _asegurar_actuacion_inspector(actuacion: Actuacion, inspector: Inspector) ->
     ).scalar_one_or_none()
     if existe:
         return
-    db.session.add(ActuacionInspector(actuacion_id=actuacion.id, inspector_id=inspector.id))
+    db.session.add(
+        ActuacionInspector(actuacion_id=actuacion.id, inspector_id=inspector.id)
+    )
 
 
-def _crear_actuacion(item: ActuacionItem, ot: OrdenTrabajo, dom: Domicilio) -> Actuacion:
+# ==========================
+#   ACTUACIÓN
+# ==========================
+
+
+def _crear_actuacion(
+    item: ActuacionItem,
+    ot: OrdenTrabajo,
+    est_dom: EstablecimientoDomicilio,
+) -> Actuacion:
     actuacion = Actuacion(
         fecha=item.fecha_actuacion,
         tipo=item.tipo_actuacion,
         orden_trabajo_id=ot.id,
-        establecimiento_domicilio_id=None,
+        establecimiento_domicilio_id=est_dom.id,  # 👈 clave para que no quede NULL
         contraproducencia=item.contraproducencia,
         observaciones=None,
     )
@@ -148,13 +240,20 @@ def _crear_actuacion(item: ActuacionItem, ot: OrdenTrabajo, dom: Domicilio) -> A
     return actuacion
 
 
+# ==========================
+#   ACTAS / NOTIFICACIONES
+# ==========================
+
+
 def _crear_acta_inspeccion(actuacion: Actuacion, item: ActuacionItem) -> None:
     if not item.acta_inspeccion_num:
         return
 
     anio = _anio_acta(item, None)
     existente = db.session.execute(
-        select(ActaInspeccion).filter_by(numero_acta=item.acta_inspeccion_num, anio=anio)
+        select(ActaInspeccion).filter_by(
+            numero_acta=item.acta_inspeccion_num, anio=anio
+        )
     ).scalar_one_or_none()
     if existente and existente.actuacion_id != actuacion.id:
         raise ActuacionServiceError(
@@ -191,7 +290,9 @@ def _crear_notificacion(
         if not motivo_texto:
             continue
         motivo = db.session.execute(
-            select(MotivoNotificacion).filter(func.upper(MotivoNotificacion.nombre) == motivo_texto.upper())
+            select(MotivoNotificacion).filter(
+                func.upper(MotivoNotificacion.nombre) == motivo_texto.upper()
+            )
         ).scalar_one_or_none()
         if not motivo:
             motivo = MotivoNotificacion(nombre=motivo_texto.upper())
@@ -298,7 +399,9 @@ def _crear_acta_clausura(actuacion: Actuacion, item: ActuacionItem) -> None:
 
     motivo_nombre = item.clausura_motivo or "SIN MOTIVO"
     motivo = db.session.execute(
-        select(MotivoClausura).filter(func.upper(MotivoClausura.nombre) == motivo_nombre.upper())
+        select(MotivoClausura).filter(
+            func.upper(MotivoClausura.nombre) == motivo_nombre.upper()
+        )
     ).scalar_one_or_none()
     if not motivo:
         motivo = MotivoClausura(nombre=motivo_nombre.upper())
@@ -352,26 +455,51 @@ def _crear_acta_decomiso(actuacion: Actuacion, item: ActuacionItem) -> None:
 
 
 def _crear_expediente(actuacion: Actuacion, item: ActuacionItem) -> None:
+    """
+    Crea (si no existe) el expediente vinculado a la actuación.
+
+    Modelo Expediente:
+
+        class Expediente(db.Model):
+            __tablename__ = "expediente"
+
+            id = db.Column(db.Integer, primary_key=True)
+            numero_expediente = db.Column(db.String(30), nullable=False)
+            anio = db.Column(db.SmallInteger, nullable=False)
+            actuacion_id = db.Column(
+                db.Integer,
+                db.ForeignKey("actuacion.id", ondelete="CASCADE", onupdate="CASCADE"),
+                nullable=False,
+                unique=True,
+            )
+            observaciones = db.Column(db.Text, nullable=True)
+    """
+
+    # Si no viene número o año, no hacemos nada
     if not item.expediente_numero or item.expediente_anio is None:
         return
+
+    anio = int(item.expediente_anio)
 
     existente = db.session.execute(
         select(Expediente).filter_by(
             actuacion_id=actuacion.id,
-            numero=item.expediente_numero,
-            anio=item.expediente_anio,
+            numero_expediente=item.expediente_numero,  # 👈 OJO: numero_expediente
+            anio=anio,
         )
     ).scalar_one_or_none()
+
     if existente:
         return
 
-    db.session.add(
-        Expediente(
-            numero=item.expediente_numero,
-            anio=item.expediente_anio,
-            actuacion_id=actuacion.id,
-        )
+    exp = Expediente(
+        numero_expediente=item.expediente_numero,  # 👈 coincide con el modelo
+        anio=anio,
+        actuacion_id=actuacion.id,
+        observaciones=None,
     )
+    db.session.add(exp)
+    db.session.flush()
 
 
 def _crear_oficio(acta: ActaComprobacion, item: ActuacionItem) -> None:
@@ -398,6 +526,11 @@ def _crear_oficio(acta: ActaComprobacion, item: ActuacionItem) -> None:
     )
 
 
+# ==========================
+#   FLUJOS SEGÚN TIPO
+# ==========================
+
+
 def _procesar_actas_base(
     actuacion: Actuacion,
     item: ActuacionItem,
@@ -407,7 +540,11 @@ def _procesar_actas_base(
 
     if item.acta_notificacion_num:
         anio = _anio_acta(item, None)
-        motivos = [item.notificacion_motivo_1, item.notificacion_motivo_2, item.notificacion_motivo_3]
+        motivos = [
+            item.notificacion_motivo_1,
+            item.notificacion_motivo_2,
+            item.notificacion_motivo_3,
+        ]
         _crear_notificacion(actuacion, item.acta_notificacion_num, anio, motivos, "DIA")
 
     acta_comp_creada: Optional[ActaComprobacion] = None
@@ -481,20 +618,49 @@ def _procesar_actas_verificar(actuacion: Actuacion, item: ActuacionItem) -> None
         _vincular_comprobacion(actuacion, acta, "VERIFICAR")
 
 
+# ==========================
+#   PUNTO DE ENTRADA PÚBLICO
+# ==========================
+
+
 def crear_actuacion_desde_item(item: ActuacionItem) -> Actuacion:
     try:
+        # 1) Orden de trabajo
         ot = _get_or_create_orden_trabajo(item.orden_trabajo_numero)
+
+        # 2) Contribuyente
         doc_tipo = _get_or_create_documento_tipo(item.doc_tipo_codigo)
-        contrib = _get_or_create_contribuyente(doc_tipo, item.doc_nro, item.contrib_apellido, item.contrib_nombre)
+        contrib = _get_or_create_contribuyente(
+            doc_tipo,
+            item.doc_nro,
+            item.contrib_apellido,
+            item.contrib_nombre,
+        )
+
+        # 3) Rubro
+        rubro = _get_or_create_rubro(item.rubro_nombre)
+
+        # 4) Domicilio (puntual de la actuación)
         domicilio = _crear_domicilio(item.calle, item.numero)
-        _get_or_create_rubro(item.rubro_nombre)
 
-        actuacion = _crear_actuacion(item, ot, domicilio)
+        # 5) Establecimiento asociado al contribuyente
+        establecimiento = _get_or_create_establecimiento(contrib)
 
+        # 6) Vincular establecimiento ↔ rubro
+        _asegurar_establecimiento_rubro(establecimiento, rubro)
+
+        # 7) Vincular establecimiento ↔ domicilio
+        est_dom = _asegurar_establecimiento_domicilio(establecimiento, domicilio)
+
+        # 8) Crear actuación apuntando al establecimiento_domicilio
+        actuacion = _crear_actuacion(item, ot, est_dom)
+
+        # 9) Inspectores
         for inspector_nombre in item.inspectores:
             inspector = _get_or_create_inspector(inspector_nombre)
             _asegurar_actuacion_inspector(actuacion, inspector)
 
+        # 🔟 Actas según tipo de actuación
         tipo = item.tipo_actuacion
         if tipo == "INSPECCION":
             _procesar_actas_base(actuacion, item)
@@ -508,5 +674,8 @@ def crear_actuacion_desde_item(item: ActuacionItem) -> Actuacion:
             raise ActuacionServiceError(f"Tipo de actuación no soportado: {tipo}")
 
         return actuacion
+
     except IntegrityError as exc:
-        raise ActuacionServiceError("Error de integridad al persistir la actuación") from exc
+        raise ActuacionServiceError(
+            "Error de integridad al persistir la actuación"
+        ) from exc

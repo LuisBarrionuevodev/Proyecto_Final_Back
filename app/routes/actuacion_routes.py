@@ -40,11 +40,17 @@
 
 from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.database import db
-from app.models import Actuacion, ActuacionComprobacion, ActuacionNotificacion
-from app.schemas.actuacion import ActuacionBatch
+from app.models import (
+    Actuacion,
+    ActuacionComprobacion,
+    ActuacionNotificacion,
+    OrdenTrabajo,
+)
+from app.schemas.actuacion import ActuacionBatch, ActuacionUpdate
 from app.services.actuacion_service import (
     ActuacionServiceError,
     crear_actuacion_desde_item,
@@ -254,6 +260,63 @@ def eliminar_actuacion(actuacion_id: int):
             ),
             500,
         )
+
+
+@bp.put("/<int:actuacion_id>")
+def actualizar_actuacion(actuacion_id: int):
+    try:
+        payload = request.get_json(force=True)
+    except Exception:
+        return jsonify({"detail": "JSON inválido o ausente"}), 400
+
+    try:
+        dto = ActuacionUpdate.model_validate(payload)
+    except ValidationError as e:
+        return jsonify({"detail": "Error de validación", "errors": e.errors()}), 422
+
+    actuacion = Actuacion.query.get(actuacion_id)
+    if not actuacion:
+        return jsonify({"detail": "Actuación no encontrada"}), 404
+
+    try:
+        if dto.fecha_actuacion is not None:
+            actuacion.fecha = dto.fecha_actuacion
+        if dto.tipo_actuacion is not None:
+            actuacion.tipo = dto.tipo_actuacion
+        if "establecimiento_domicilio_id" in payload:
+            actuacion.establecimiento_domicilio_id = dto.establecimiento_domicilio_id
+
+        if "orden_trabajo_numero" in payload:
+            if dto.orden_trabajo_numero is None:
+                actuacion.orden_trabajo_id = None
+            else:
+                orden_trabajo = db.session.execute(
+                    select(OrdenTrabajo).filter_by(numero=dto.orden_trabajo_numero)
+                ).scalar_one_or_none()
+                if not orden_trabajo:
+                    orden_trabajo = OrdenTrabajo(
+                        numero=dto.orden_trabajo_numero, descripcion=None
+                    )
+                    db.session.add(orden_trabajo)
+                    db.session.flush()
+
+                actuacion.orden_trabajo_id = orden_trabajo.id
+
+        db.session.commit()
+        db.session.refresh(actuacion)
+    except Exception as e:
+        db.session.rollback()
+        return (
+            jsonify(
+                {
+                    "detail": "Error interno al actualizar la actuación",
+                    "error": str(e),
+                }
+            ),
+            500,
+        )
+
+    return jsonify(_serializar_actuacion_resumen(actuacion)), 200
 
 
 @bp.post("")

@@ -206,3 +206,66 @@ class ActuacionBatch(BaseModel):
         if not self.items:
             raise ValueError("Debe enviar al menos una actuación en 'items'")
         return self
+
+
+class ActuacionUpdate(BaseModel):
+    fecha_actuacion: Optional[date] = None
+    tipo_actuacion: Optional[TipoActuacionStr] = None
+    orden_trabajo_numero: Optional[ActaNumero6] = None
+    establecimiento_domicilio_id: Optional[int] = None
+    contraproducencia: Optional[str] = None
+    inspectores: Optional[List[str]] = None
+
+    @field_validator("fecha_actuacion", mode="before")
+    @classmethod
+    def _parse_fecha(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, date):
+            return v
+
+        s = str(v).strip()
+        for fmt in ("%d/%m/%y", "%d/%m/%Y", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(s, fmt).date()
+            except ValueError:
+                continue
+        raise ValueError("fecha_actuacion debe tener formato DD/MM/AA")
+
+    @field_validator("tipo_actuacion", mode="before")
+    @classmethod
+    def _tipo_actuacion_val(cls, v):
+        if v is None:
+            return None
+        s = to_upper_trim(v)
+        opciones = [
+            "INSPECCION",
+            "REINSPECCION",
+            "RATIFICACION",
+            "VERIFICAR E INFORMAR",
+        ]
+        validar_opcion_en_lista(s, opciones, "tipo_actuacion")
+        return s
+
+    @field_validator("orden_trabajo_numero", mode="before")
+    @classmethod
+    def _strip_ot(cls, v):
+        if v in (None, ""):
+            return None
+        return acta_6(v)
+
+    @field_validator("inspectores", mode="before")
+    @classmethod
+    def _inspectores_list(cls, v):
+        if v is None:
+            return None
+
+        if isinstance(v, str):
+            items = [i.strip() for i in v.split(",") if i.strip()]
+        else:
+            items = [str(i).strip() for i in v if str(i).strip()]
+
+        if not (1 <= len(items) <= 4):
+            raise ValueError("inspectores debe tener entre 1 y 4 nombres/apellidos")
+
+        return [to_upper_trim(i) for i in items]

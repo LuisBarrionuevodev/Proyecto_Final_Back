@@ -40,14 +40,21 @@
 
 from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.database import db
-from app.models import Actuacion, ActuacionComprobacion, ActuacionNotificacion
-from app.schemas.actuacion import ActuacionBatch
+from app.models import (
+    Actuacion,
+    ActuacionComprobacion,
+    ActuacionNotificacion,
+    OrdenTrabajo,
+)
+from app.schemas.actuacion import ActuacionBatch, ActuacionUpdate
 from app.services.actuacion_service import (
     ActuacionServiceError,
     crear_actuacion_desde_item,
+    _get_or_create_inspector,
 )
 
 bp = Blueprint("actuaciones", __name__)
@@ -76,10 +83,13 @@ def _serializar_actuacion_resumen(actuacion: Actuacion) -> dict:
 def _serializar_actuacion(actuacion: Actuacion) -> dict:
     """Convierte el modelo en un dict listo para el front."""
 
-    inspectores = [
-        f"{i.apellido} {i.nombre}".strip() if i.apellido or i.nombre else i.apellido
-        for i in actuacion.inspectores
-    ]
+    inspectores = []
+    for inspector in actuacion.inspectores:
+        nombre = (
+            f"{inspector.apellido or ''} {inspector.nombre or ''}"
+        ).strip()
+        if nombre:
+            inspectores.append(nombre)
 
     est_dom = getattr(actuacion, "establecimiento_domicilio", None)
     domicilio = est_dom.domicilio if est_dom else None
@@ -145,8 +155,8 @@ def _serializar_actuacion(actuacion: Actuacion) -> dict:
         "fecha_actuacion": actuacion.fecha.isoformat() if actuacion.fecha else None,
         "rubro_nombre": rubro_nombre,
         "inspectores": inspectores,
-        "calle": domicilio.calle if domicilio else "",
-        "numero": domicilio.numero if domicilio else "",
+        "calle": domicilio.calle if domicilio else None,
+        "numero": domicilio.numero if domicilio else None,
         "tipo_actuacion": actuacion.tipo,
         "contraproducencia": actuacion.contraproducencia,
         "doc_tipo_codigo": contrib.doc_tipo.codigo
@@ -203,13 +213,16 @@ def _serializar_actuacion(actuacion: Actuacion) -> dict:
         "comprobacion_previa_num": comprobacion_previa.numero_acta
         if comprobacion_previa
         else None,
+        "establecimiento_domicilio_id": actuacion.establecimiento_domicilio_id,
+        "created_at": actuacion.created_at.isoformat() if actuacion.created_at else None,
+        "updated_at": actuacion.updated_at.isoformat() if actuacion.updated_at else None,
     }
 
 
 @bp.get("")
 def listar_actuaciones():
     actuaciones = Actuacion.query.all()
-    return jsonify([_serializar_actuacion_resumen(a) for a in actuaciones]), 200
+    return jsonify([_serializar_actuacion(a) for a in actuaciones]), 200
 
 
 @bp.delete("/<int:actuacion_id>")
@@ -254,6 +267,74 @@ def eliminar_actuacion(actuacion_id: int):
             ),
             500,
         )
+
+
+@bp.put("/<int:actuacion_id>")
+def actualizar_actuacion(actuacion_id: int):
+    try:
+        payload = request.get_json(force=True)
+    except Exception:
+        return jsonify({"detail": "JSON inválido o ausente"}), 400
+
+    try:
+        dto = ActuacionUpdate.model_validate(payload)
+    except ValidationError as e:
+        return jsonify({"detail": "Error de validación", "errors": e.errors()}), 422
+
+    actuacion = Actuacion.query.get(actuacion_id)
+    if not actuacion:
+        return jsonify({"detail": "Actuación no encontrada"}), 404
+
+    try:
+        if dto.fecha_actuacion is not None:
+            actuacion.fecha = dto.fecha_actuacion
+        if dto.tipo_actuacion is not None:
+            actuacion.tipo = dto.tipo_actuacion
+        if "establecimiento_domicilio_id" in payload:
+            actuacion.establecimiento_domicilio_id = dto.establecimiento_domicilio_id
+
+        if dto.contraproducencia is not None:
+            actuacion.contraproducencia = dto.contraproducencia
+
+        if dto.inspectores is not None:
+            nuevos_inspectores = []
+            for inspector_nombre in dto.inspectores:
+                inspector = _get_or_create_inspector(inspector_nombre)
+                nuevos_inspectores.append(inspector)
+            actuacion.inspectores = nuevos_inspectores
+
+        if "orden_trabajo_numero" in payload:
+            if dto.orden_trabajo_numero is None:
+                actuacion.orden_trabajo_id = None
+            else:
+                orden_trabajo = db.session.execute(
+                    select(OrdenTrabajo).filter_by(numero=dto.orden_trabajo_numero)
+                ).scalar_one_or_none()
+                if not orden_trabajo:
+                    orden_trabajo = OrdenTrabajo(
+                        numero=dto.orden_trabajo_numero, descripcion=None
+                    )
+                    db.session.add(orden_trabajo)
+                    db.session.flush()
+
+                actuacion.orden_trabajo_id = orden_trabajo.id
+
+        db.session.commit()
+        db.session.refresh(actuacion)
+    except Exception as e:
+        db.session.rollback()
+        return (
+            jsonify(
+                {
+                    "detail": "Error interno al actualizar la actuación",
+                    "error": str(e),
+                }
+            ),
+            500,
+        )
+
+    # TODO: permitir actualizar rubro, domicilio y actas relacionadas de manera granular.
+    return jsonify(_serializar_actuacion(actuacion)), 200
 
 
 @bp.post("")

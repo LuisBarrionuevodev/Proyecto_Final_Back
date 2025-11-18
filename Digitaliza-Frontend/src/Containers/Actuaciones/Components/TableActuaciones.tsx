@@ -4,6 +4,7 @@ import {
   MaterialReactTable,
   useMaterialReactTable,
   type MRT_ColumnDef,
+  type MRT_TableOptions,
 } from "material-react-table";
 import { useCallback, useMemo } from "react";
 import { BASE_TABLE_CONFIG } from "../../../constants/tableConfig";
@@ -14,7 +15,7 @@ import {
   TableTitleStyles,
 } from "../../../styles/TablasStyle";
 import { useGestionActuaciones } from "../../../hooks/useGestionActuaciones";
-import { deleteActuacion } from "../../../api/actuacionesApi";
+import { deleteActuacion, updateActuacion } from "../../../api/actuacionesApi";
 import { TablaExportButtons } from "./TableButtons";
 
 const TablaActuaciones = () => {
@@ -35,27 +36,118 @@ const TablaActuaciones = () => {
     [setActuaciones],
   );
 
+  const handleSaveRow: MRT_TableOptions<IActuacionListado>["onEditingRowSave"] =
+    useCallback(
+      async ({ values, exitEditingMode }) => {
+        const id = Number(values.id);
+        if (Number.isNaN(id)) {
+          alert("ID de actuación inválido");
+          return;
+        }
+
+        const inspectores = Array.isArray(values.inspectores)
+          ? values.inspectores
+          : `${values.inspectores ?? ""}`
+              .split(",")
+              .map((v) => v.trim())
+              .filter(Boolean);
+
+        const payload: Partial<IActuacionListado> = {
+          fecha_actuacion: values.fecha_actuacion,
+          tipo_actuacion: values.tipo_actuacion,
+          orden_trabajo_numero: values.orden_trabajo_numero ?? null,
+          contraproducencia: values.contraproducencia,
+          inspectores,
+        };
+
+        try {
+          const updated = await updateActuacion(id, payload);
+          setActuaciones((prev) =>
+            prev.map((item) => (item.id === id ? updated : item)),
+          );
+          exitEditingMode();
+        } catch (error) {
+          console.error("Error al actualizar:", error);
+          alert("No se pudo actualizar el registro.");
+        }
+      },
+      [setActuaciones],
+    );
+
   const columns = useMemo<MRT_ColumnDef<IActuacionListado>[]>(
     () => [
       { accessorKey: "id", header: "ID", enableEditing: false },
-      { accessorKey: "fecha_actuacion", header: "Fecha actuación" },
+      {
+        accessorKey: "fecha_actuacion",
+        header: "Fecha actuación",
+        muiTableBodyCellEditTextFieldProps: {
+          type: "date",
+        },
+      },
       { accessorKey: "tipo_actuacion", header: "Tipo" },
       { accessorKey: "orden_trabajo_numero", header: "OT" },
+      { accessorKey: "rubro_nombre", header: "Rubro", enableEditing: false },
+      {
+        accessorKey: "inspectores",
+        header: "Inspectores",
+        Cell: ({ cell }) => (cell.getValue<string[]>() || []).join(", "),
+        muiTableBodyCellEditTextFieldProps: ({ cell, row }) => ({
+          defaultValue: (cell.getValue<string[]>() || []).join(", "),
+          onChange: (event) => {
+            row._valuesCache.inspectores = event.target.value
+              .split(",")
+              .map((v: string) => v.trim())
+              .filter(Boolean);
+          },
+        }),
+      },
+      { accessorKey: "calle", header: "Calle", enableEditing: false },
+      { accessorKey: "numero", header: "Número", enableEditing: false },
+      { accessorKey: "contraproducencia", header: "Contraproducencia" },
+      { accessorKey: "doc_tipo_codigo", header: "Doc. Tipo", enableEditing: false },
+      { accessorKey: "doc_nro", header: "Doc. Nro", enableEditing: false },
+      { accessorKey: "contrib_apellido", header: "Apellido", enableEditing: false },
+      { accessorKey: "contrib_nombre", header: "Nombre", enableEditing: false },
+      { accessorKey: "acta_inspeccion_num", header: "Acta inspección", enableEditing: false },
+      { accessorKey: "acta_notificacion_num", header: "Acta notificación", enableEditing: false },
+      { accessorKey: "notificacion_motivo_1", header: "Notif. Motivo 1", enableEditing: false },
+      { accessorKey: "notificacion_motivo_2", header: "Notif. Motivo 2", enableEditing: false },
+      { accessorKey: "notificacion_motivo_3", header: "Notif. Motivo 3", enableEditing: false },
+      { accessorKey: "acta_comprobacion_num", header: "Acta comprobación", enableEditing: false },
+      { accessorKey: "comprobacion_motivo", header: "Comprobación motivo", enableEditing: false },
+      { accessorKey: "acta_clausura_num", header: "Acta clausura", enableEditing: false },
+      { accessorKey: "clausura_motivo", header: "Clausura motivo", enableEditing: false },
+      { accessorKey: "acta_decomiso_num", header: "Acta decomiso", enableEditing: false },
+      { accessorKey: "decomiso_kilos_total", header: "Kg decomiso", enableEditing: false },
+      { accessorKey: "expediente_numero", header: "Expediente número", enableEditing: false },
+      { accessorKey: "expediente_anio", header: "Expediente año", enableEditing: false },
+      { accessorKey: "oficio_numero", header: "Oficio número", enableEditing: false },
+      { accessorKey: "oficio_anio", header: "Oficio año", enableEditing: false },
+      { accessorKey: "oficio_causa", header: "Oficio causa", enableEditing: false },
+      { accessorKey: "notificacion_previa_num", header: "Notif. previa", enableEditing: false },
+      { accessorKey: "comprobacion_previa_num", header: "Comprob. previa", enableEditing: false },
       {
         accessorKey: "establecimiento_domicilio_id",
         header: "Estab./Domicilio ID",
+        enableEditing: false,
       },
-      { accessorKey: "created_at", header: "Creado" },
-      { accessorKey: "updated_at", header: "Actualizado" },
+      { accessorKey: "created_at", header: "Creado", enableEditing: false },
+      { accessorKey: "updated_at", header: "Actualizado", enableEditing: false },
     ],
     [],
   );
 
   const table = useMaterialReactTable({
     ...BASE_TABLE_CONFIG,
+    editDisplayMode: "row",
     columns,
     data: actuaciones,
+    enableColumnOrdering: true,
+    enableColumnFilters: true,
+    enableGlobalFilter: true,
+    enableHiding: true,
     enableRowActions: true,
+    onEditingRowSave: handleSaveRow,
     renderRowActions: ({ row }) => (
       <Box sx={{ display: "flex", gap: "0.5rem" }}>
         <Tooltip title="Eliminar">

@@ -7,6 +7,7 @@ import {
 } from "material-react-table";
 import { useState } from "react";
 import { Box, Typography } from "@mui/material";
+import axios from "axios"; // 👈 NUEVO
 
 import { createActuacion } from "../../../api/actuacionesApi";
 import { TABLE_CREAR_ACTUACIONES } from "../../../constants/tableConfig";
@@ -43,6 +44,42 @@ const TablaCargarActuaciones = () => {
     setValidationErrors(validateActuacion(row._valuesCache));
   };
 
+  /*
+    Ejemplo de payload que se envía al backend desde esta tabla (se envía un solo
+    objeto y el backend lo envuelve como {"items": [obj]}):
+    {
+      "orden_trabajo_numero": "000123",
+      "fecha_actuacion": "2024-06-01",
+      "rubro_nombre": "ALIMENTOS",
+      "inspectores": ["INSPECTOR UNO", "INSPECTOR DOS"],
+      "calle": "SARMIENTO",
+      "numero": "1234",
+      "tipo_actuacion": "INSPECCION",
+      "contraproducencia": "SIN OBSERVACIONES",
+      "doc_tipo_codigo": "DNI",
+      "doc_nro": "12345678",
+      "contrib_apellido": "PEREZ",
+      "contrib_nombre": "JUAN",
+      "acta_inspeccion_num": "000111",
+      "acta_notificacion_num": "000222",
+      "notificacion_motivo_1": "FALTA DE HIGIENE",
+      "notificacion_motivo_2": "VENTILACION DEFECTUOSA",
+      "notificacion_motivo_3": "OTRO MOTIVO",
+      "acta_comprobacion_num": "000333",
+      "comprobacion_motivo": "INCUMPLIMIENTO PLAZO",
+      "acta_clausura_num": "000444",
+      "clausura_motivo": "RIESGO SANITARIO",
+      "acta_decomiso_num": "000555",
+      "decomiso_kilos_total": 12.5,
+      "expediente_numero": "EXP-2024-001",
+      "expediente_anio": 24,
+      "oficio_numero": "OF-77",
+      "oficio_anio": 24,
+      "oficio_causa": 987,
+      "notificacion_previa_num": "000666",
+      "comprobacion_previa_num": "000777"
+    }
+  */
   const handleCreateNewRow: MRT_TableOptions<IActuacion>["onCreatingRowSave"] =
     async ({ values, table }) => {
       const payload: IActuacion = {
@@ -99,7 +136,15 @@ const TablaCargarActuaciones = () => {
           table.setCreatingRow(true);
         }, 50);
       } catch (error) {
-        console.error("Error al crear actuación:", error);
+        if (axios.isAxiosError(error)) {
+          console.error(
+            "Error al crear actuación (backend):",
+            error.response?.status,
+            error.response?.data
+          );
+        } else {
+          console.error("Error al crear actuación (desconocido):", error);
+        }
       }
     };
 
@@ -217,6 +262,15 @@ const TablaCargarActuaciones = () => {
       }),
     },
     {
+      accessorKey: "contraproducencia",
+      header: "Contraproducencia",
+      muiEditTextFieldProps: ({ row }) => ({
+        onChange: (e) => {
+          row._valuesCache.contraproducencia = e.target.value;
+        },
+      }),
+    },
+    {
       accessorKey: "doc_tipo_codigo",
       header: "Tipo doc",
       muiEditTextFieldProps: ({ cell, row }) => ({
@@ -280,11 +334,47 @@ const TablaCargarActuaciones = () => {
       }),
     },
     {
+      accessorKey: "notificacion_motivo_1",
+      header: "Motivo notificación 1",
+      muiEditTextFieldProps: ({ row }) => ({
+        onChange: (e) => {
+          row._valuesCache.notificacion_motivo_1 = e.target.value;
+        },
+      }),
+    },
+    {
+      accessorKey: "notificacion_motivo_2",
+      header: "Motivo notificación 2",
+      muiEditTextFieldProps: ({ row }) => ({
+        onChange: (e) => {
+          row._valuesCache.notificacion_motivo_2 = e.target.value;
+        },
+      }),
+    },
+    {
+      accessorKey: "notificacion_motivo_3",
+      header: "Motivo notificación 3",
+      muiEditTextFieldProps: ({ row }) => ({
+        onChange: (e) => {
+          row._valuesCache.notificacion_motivo_3 = e.target.value;
+        },
+      }),
+    },
+    {
       accessorKey: "acta_comprobacion_num",
       header: "Acta comprobación",
       muiEditTextFieldProps: ({ row }) => ({
         onChange: (e) => {
           row._valuesCache.acta_comprobacion_num = e.target.value;
+        },
+      }),
+    },
+    {
+      accessorKey: "comprobacion_motivo",
+      header: "Motivo comprobación",
+      muiEditTextFieldProps: ({ row }) => ({
+        onChange: (e) => {
+          row._valuesCache.comprobacion_motivo = e.target.value;
         },
       }),
     },
@@ -298,11 +388,97 @@ const TablaCargarActuaciones = () => {
       }),
     },
     {
+      accessorKey: "clausura_motivo",
+      header: "Motivo clausura",
+      muiEditTextFieldProps: ({ row }) => ({
+        onChange: (e) => {
+          row._valuesCache.clausura_motivo = e.target.value;
+        },
+      }),
+    },
+    {
       accessorKey: "acta_decomiso_num",
       header: "Acta decomiso",
       muiEditTextFieldProps: ({ row }) => ({
         onChange: (e) => {
           row._valuesCache.acta_decomiso_num = e.target.value;
+        },
+      }),
+    },
+    {
+      accessorKey: "decomiso_kilos_total",
+      header: "Kg decomiso",
+      muiEditTextFieldProps: ({ row }) => ({
+        type: "number",
+        onChange: (e) => {
+          row._valuesCache.decomiso_kilos_total = e.target.value;
+        },
+        onBlur: () => validateRow(row),
+      }),
+    },
+    {
+      accessorKey: "expediente_numero",
+      header: "Expediente número",
+      muiEditTextFieldProps: ({ row }) => ({
+        onChange: (e) => {
+          row._valuesCache.expediente_numero = e.target.value;
+        },
+      }),
+    },
+    {
+      accessorKey: "expediente_anio",
+      header: "Expediente año",
+      muiEditTextFieldProps: ({ row }) => ({
+        type: "number",
+        onChange: (e) => {
+          row._valuesCache.expediente_anio = e.target.value;
+        },
+      }),
+    },
+    {
+      accessorKey: "oficio_numero",
+      header: "Oficio número",
+      muiEditTextFieldProps: ({ row }) => ({
+        onChange: (e) => {
+          row._valuesCache.oficio_numero = e.target.value;
+        },
+      }),
+    },
+    {
+      accessorKey: "oficio_anio",
+      header: "Oficio año",
+      muiEditTextFieldProps: ({ row }) => ({
+        type: "number",
+        onChange: (e) => {
+          row._valuesCache.oficio_anio = e.target.value;
+        },
+      }),
+    },
+    {
+      accessorKey: "oficio_causa",
+      header: "Oficio causa",
+      muiEditTextFieldProps: ({ row }) => ({
+        type: "number",
+        onChange: (e) => {
+          row._valuesCache.oficio_causa = e.target.value;
+        },
+      }),
+    },
+    {
+      accessorKey: "notificacion_previa_num",
+      header: "Notif. previa",
+      muiEditTextFieldProps: ({ row }) => ({
+        onChange: (e) => {
+          row._valuesCache.notificacion_previa_num = e.target.value;
+        },
+      }),
+    },
+    {
+      accessorKey: "comprobacion_previa_num",
+      header: "Comprob. previa",
+      muiEditTextFieldProps: ({ row }) => ({
+        onChange: (e) => {
+          row._valuesCache.comprobacion_previa_num = e.target.value;
         },
       }),
     },

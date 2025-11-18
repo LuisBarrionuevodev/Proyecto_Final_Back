@@ -5,6 +5,7 @@ import Actuaciones from "./Containers/Actuaciones";
 import CargarRelevamientos from "./Containers/CargarRelevamientos";
 import CargarActuaciones from "./Containers/CargarActuaciones";
 import Dashboard from "./Containers/Dashboard";
+import PanelGeografico from "./Containers/Mapa/Index";
 
 function App() {
 
@@ -20,6 +21,7 @@ function App() {
         <Route path="/cargarRelevamiento" element={ <CargarRelevamientos/> } />
         <Route path="/cargarActuacion" element={ <CargarActuaciones/> } />
         <Route path="/dashboard" element={ <Dashboard/> } />
+        <Route path="/mapa" element={ <PanelGeografico/> } />
       </Routes>
     </Router>
 

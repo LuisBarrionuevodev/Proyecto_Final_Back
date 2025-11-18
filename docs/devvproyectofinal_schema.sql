@@ -253,12 +253,12 @@ CREATE TABLE IF NOT EXISTS actuacion_comprobacion (
 
 CREATE TABLE IF NOT EXISTS expediente (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  numero VARCHAR(20) NOT NULL,
+  numero_expediente VARCHAR(30) NOT NULL,
   anio SMALLINT NOT NULL,
   actuacion_id INT NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_expediente_numero (numero, anio),
+  UNIQUE KEY uq_expediente_numero (numero_expediente, anio),
   CONSTRAINT fk_exp_act FOREIGN KEY (actuacion_id) REFERENCES actuacion(id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 

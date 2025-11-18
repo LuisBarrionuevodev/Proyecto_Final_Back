@@ -7,7 +7,7 @@ export type TipoActuacion =
 export interface IActuacion {
   id?: number;
   orden_trabajo_numero: string;
-  fecha_actuacion: string;
+  fecha_actuacion: string; // UI DD/MM/YY → backend YYYY-MM-DD
   rubro_nombre: string;
   inspectores: string[];
   calle: string;
@@ -36,4 +36,14 @@ export interface IActuacion {
   oficio_causa?: number;
   notificacion_previa_num?: string;
   comprobacion_previa_num?: string;
+}
+
+export interface IActuacionListado {
+  id: number;
+  fecha_actuacion: string;
+  tipo_actuacion: "INSPECCION" | "REINSPECCION" | "RATIFICACION" | "VERIFICAR E INFORMAR";
+  orden_trabajo_numero: string | null;
+  establecimiento_domicilio_id: number | null;
+  created_at: string;
+  updated_at: string;
 }

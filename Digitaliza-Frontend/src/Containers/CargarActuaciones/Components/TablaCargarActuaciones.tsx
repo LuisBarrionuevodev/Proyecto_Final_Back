@@ -166,6 +166,7 @@ const TablaCargarActuaciones = () => {
       accessorKey: "fecha_actuacion",
       header: "Fecha (DD/MM/YY)",
       muiEditTextFieldProps: ({ cell, row }) => ({
+        type: "date",
         error: !!validationErrors[cell.column.id],
         helperText: validationErrors[cell.column.id],
         onChange: (e) => {
@@ -479,7 +480,17 @@ const TablaCargarActuaciones = () => {
       muiEditTextFieldProps: ({ row }) => ({
         onChange: (e) => {
           row._valuesCache.comprobacion_previa_num = e.target.value;
-        },
+        },onKeyDown: (e) => {
+          if (e.key === "Enter") {
+            table.options.onCreatingRowSave?.({
+              values: row.getAllCells().reduce((acc, c) => {
+                acc[c.column.id] = row._valuesCache[c.column.id];
+                return acc;
+              }, {} as any),
+              table,
+            } as any);
+          }
+        }
       }),
     },
   ];

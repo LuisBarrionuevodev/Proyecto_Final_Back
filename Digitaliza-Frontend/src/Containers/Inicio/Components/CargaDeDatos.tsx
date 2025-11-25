@@ -18,6 +18,7 @@ const CargaDeDatos = (): JSX.Element => {
             rowSpacing={2} 
             sx={BoxInputInicio}>
                 <Grid>
+                    <a href="/cargarActuacion">
                     <Button sx={ButtonStylesInicio}>
 
                         <Box component={"img"} 
@@ -27,9 +28,11 @@ const CargaDeDatos = (): JSX.Element => {
                         Cargar Actuacion
 
                     </Button>
+                    </a>
                 </Grid>
 
                 <Grid>
+                    <a href="/cargarRelevamiento">
                     <Button sx={ButtonStylesInicio}>
 
                         <Box component={"img"} 
@@ -38,6 +41,7 @@ const CargaDeDatos = (): JSX.Element => {
 
                         Cargar Relevamiento
                     </Button>
+                    </a>
                 </Grid>
             </Grid>
         </Box>

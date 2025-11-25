@@ -44,10 +44,12 @@ def create_app() -> Flask:
     )
 
     # 5) Registrar blueprints
-    from .routes import actuaciones_bp, health_bp  # noqa: WPS433
+    from .routes import actuaciones_bp, dashboard_bp, health_bp, relevamientos_bp
 
     app.register_blueprint(health_bp, url_prefix="/api/v1/health")
     app.register_blueprint(actuaciones_bp, url_prefix="/api/v1/actuaciones")
+    app.register_blueprint(relevamientos_bp, url_prefix="/api/v1/relevamientos")
+    app.register_blueprint(dashboard_bp, url_prefix="/api/v1/dashboard")
 
     # 6) Ruta raíz de prueba
     @app.get("/")

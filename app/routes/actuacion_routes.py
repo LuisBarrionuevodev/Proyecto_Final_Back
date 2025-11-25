@@ -1,43 +1,5 @@
 # app/routes/actuacion_routes.py
 
-# Ejemplo de payload válido para POST /api/v1/actuaciones
-# {
-#   "items": [
-#     {
-#       "orden_trabajo_numero": "000123",
-#       "fecha_actuacion": "2024-05-10",
-#       "inspectores": ["INSPECTOR UNO", "INSPECTOR DOS"],
-#       "calle": "AV SARMIENTO",
-#       "numero": "1234",
-#       "rubro_nombre": "ALIMENTOS",
-#       "tipo_actuacion": "INSPECCION",
-#       "contraproducencia": "SIN OBSERVACIONES",
-#       "doc_tipo_codigo": "DNI",
-#       "doc_nro": "12345678",
-#       "contrib_apellido": "PEREZ",
-#       "contrib_nombre": "JUAN",
-#       "acta_inspeccion_num": "000111",
-#       "acta_notificacion_num": "000222",
-#       "notificacion_motivo_1": "FALTA DE HIGIENE",
-#       "notificacion_motivo_2": "VENTILACION DEFECTUOSA",
-#       "notificacion_motivo_3": "OTRO MOTIVO",
-#       "acta_comprobacion_num": "000333",
-#       "comprobacion_motivo": "INCUMPLIMIENTO PLAZO",
-#       "acta_clausura_num": "000444",
-#       "clausura_motivo": "RIESGO SANITARIO",
-#       "acta_decomiso_num": "000555",
-#       "decomiso_kilos_total": 12.5,
-#       "expediente_numero": "EXP-2024-001",
-#       "expediente_anio": 24,
-#       "oficio_numero": "OF-77",
-#       "oficio_anio": 24,
-#       "oficio_causa": 987,
-#       "notificacion_previa_num": "000666",
-#       "comprobacion_previa_num": "000777"
-#     }
-#   ]
-# }
-
 from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -53,15 +15,20 @@ from app.models import (
 from app.schemas.actuacion import ActuacionBatch, ActuacionUpdate
 from app.services.actuacion_service import (
     ActuacionServiceError,
-    crear_actuacion_desde_item,
     _get_or_create_inspector,
+    crear_actuacion_desde_item,
 )
 
 bp = Blueprint("actuaciones", __name__)
 
 
+# ==========================
+#   SERIALIZADORES
+# ==========================
+
+
 def _serializar_actuacion_resumen(actuacion: Actuacion) -> dict:
-    """Serializa los campos mínimos para el listado de actuaciones."""
+    """Serializa los campos mínimos para un listado simple de actuaciones."""
 
     return {
         "id": actuacion.id,
@@ -70,7 +37,7 @@ def _serializar_actuacion_resumen(actuacion: Actuacion) -> dict:
         "orden_trabajo_numero": actuacion.orden_trabajo.numero
         if actuacion.orden_trabajo
         else None,
-        "establecimiento_domicilio_id": actuacion.establecimiento_domicilio_id,
+        "domicilio_id": actuacion.domicilio_id,
         "created_at": actuacion.created_at.isoformat()
         if actuacion.created_at
         else None,
@@ -81,28 +48,25 @@ def _serializar_actuacion_resumen(actuacion: Actuacion) -> dict:
 
 
 def _serializar_actuacion(actuacion: Actuacion) -> dict:
-    """Convierte el modelo en un dict listo para el front."""
+    """
+    Convierte el modelo en un dict listo para el front,
+    incluyendo toda la info 'planchada' que necesitás en la tabla de gestión.
+    """
 
+    # Inspectores: concatenar apellido + nombre si están
     inspectores = []
     for inspector in actuacion.inspectores:
-        nombre = (
-            f"{inspector.apellido or ''} {inspector.nombre or ''}"
-        ).strip()
+        nombre = f"{inspector.apellido or ''} {inspector.nombre or ''}".strip()
         if nombre:
             inspectores.append(nombre)
 
-    est_dom = getattr(actuacion, "establecimiento_domicilio", None)
-    domicilio = est_dom.domicilio if est_dom else None
-    establecimiento = est_dom.establecimiento if est_dom else None
-    contrib = establecimiento.contribuyente if establecimiento else None
+    # Nuevo modelo: actuacion -> domicilio -> (contribuyente, rubro)
+    domicilio = getattr(actuacion, "domicilio", None)
+    contrib = getattr(domicilio, "contribuyente", None) if domicilio else None
+    rubro = getattr(domicilio, "rubro", None) if domicilio else None
+    rubro_nombre = rubro.nombre if rubro else None
 
-    rubro_nombre = None
-    if establecimiento and getattr(establecimiento, "establecimiento_rubros", None):
-        rubros = establecimiento.establecimiento_rubros
-        if rubros:
-            rubro_vigente = next((er for er in rubros if er.fecha_hasta is None), None)
-            rubro_nombre = (rubro_vigente or rubros[0]).rubro.nombre
-
+    # NOTIFICACIONES (actual y previa) usando la tabla puente actuacion_notificacion
     notificaciones_por_id = {n.id: n for n in actuacion.actas_notificacion}
     links_notif = ActuacionNotificacion.query.filter_by(actuacion_id=actuacion.id).all()
     notificacion_previa = None
@@ -123,6 +87,7 @@ def _serializar_actuacion(actuacion: Actuacion) -> dict:
         m.nombre for m in (notificacion_actual.motivos if notificacion_actual else [])
     ]
 
+    # COMPROBACIONES (actual y previa) usando la tabla puente actuacion_comprobacion
     comprobaciones_por_id = {c.id: c for c in actuacion.actas_comprobacion}
     links_comp = ActuacionComprobacion.query.filter_by(actuacion_id=actuacion.id).all()
     comprobacion_previa = None
@@ -141,6 +106,7 @@ def _serializar_actuacion(actuacion: Actuacion) -> dict:
             links_comp[0].acta_comprobacion_id
         )
 
+    # Oficio (si existe) asociado a la comprobación actual
     oficio = (
         comprobacion_actual.oficios[0]
         if comprobacion_actual and getattr(comprobacion_actual, "oficios", None)
@@ -213,14 +179,24 @@ def _serializar_actuacion(actuacion: Actuacion) -> dict:
         "comprobacion_previa_num": comprobacion_previa.numero_acta
         if comprobacion_previa
         else None,
-        "establecimiento_domicilio_id": actuacion.establecimiento_domicilio_id,
-        "created_at": actuacion.created_at.isoformat() if actuacion.created_at else None,
-        "updated_at": actuacion.updated_at.isoformat() if actuacion.updated_at else None,
+        "domicilio_id": actuacion.domicilio_id,
+        "created_at": actuacion.created_at.isoformat()
+        if actuacion.created_at
+        else None,
+        "updated_at": actuacion.updated_at.isoformat()
+        if actuacion.updated_at
+        else None,
     }
+
+
+# ==========================
+#   RUTAS
+# ==========================
 
 
 @bp.get("")
 def listar_actuaciones():
+    """GET /api/v1/actuaciones: lista todas las actuaciones (vista completa)."""
     actuaciones = Actuacion.query.all()
     return jsonify([_serializar_actuacion(a) for a in actuaciones]), 200
 
@@ -245,7 +221,6 @@ def eliminar_actuacion(actuacion_id: int):
 
     except IntegrityError as e:
         db.session.rollback()
-        # Muy probablemente un "Cannot delete or update a parent row: a foreign key constraint fails"
         return (
             jsonify(
                 {
@@ -271,6 +246,17 @@ def eliminar_actuacion(actuacion_id: int):
 
 @bp.put("/<int:actuacion_id>")
 def actualizar_actuacion(actuacion_id: int):
+    """
+    PUT /api/v1/actuaciones/<id>
+
+    Actualiza campos básicos de la actuación:
+      - fecha_actuacion
+      - tipo_actuacion
+      - domicilio_id (nuevo modelo)
+      - contraproducencia
+      - inspectores
+      - orden_trabajo_numero
+    """
     try:
         payload = request.get_json(force=True)
     except Exception:
@@ -290,8 +276,10 @@ def actualizar_actuacion(actuacion_id: int):
             actuacion.fecha = dto.fecha_actuacion
         if dto.tipo_actuacion is not None:
             actuacion.tipo = dto.tipo_actuacion
-        if "establecimiento_domicilio_id" in payload:
-            actuacion.establecimiento_domicilio_id = dto.establecimiento_domicilio_id
+
+        # Nuevo: permitir cambiar el domicilio_id
+        if "domicilio_id" in payload:
+            actuacion.domicilio_id = dto.domicilio_id
 
         if dto.contraproducencia is not None:
             actuacion.contraproducencia = dto.contraproducencia
@@ -303,6 +291,7 @@ def actualizar_actuacion(actuacion_id: int):
                 nuevos_inspectores.append(inspector)
             actuacion.inspectores = nuevos_inspectores
 
+        # Cambio de orden de trabajo (puede ser None)
         if "orden_trabajo_numero" in payload:
             if dto.orden_trabajo_numero is None:
                 actuacion.orden_trabajo_id = None
@@ -333,7 +322,7 @@ def actualizar_actuacion(actuacion_id: int):
             500,
         )
 
-    # TODO: permitir actualizar rubro, domicilio y actas relacionadas de manera granular.
+    # TODO: permitir actualizar rubro, domicilio (datos finos) y actas relacionadas de manera granular.
     return jsonify(_serializar_actuacion(actuacion)), 200
 
 
@@ -346,6 +335,7 @@ def crear_actuaciones():
     except Exception:
         return jsonify({"detail": "JSON inválido o ausente"}), 400
 
+    # Permitimos que venga un solo objeto o {"items": [...]}
     if isinstance(payload, dict) and "items" not in payload:
         payload = {"items": [payload]}
 
@@ -363,10 +353,14 @@ def crear_actuaciones():
             for item in batch.items:
                 actuacion = crear_actuacion_desde_item(item)
                 respuesta = _serializar_actuacion(actuacion)
+
+                # Estos campos DEBERÍAN matchear ya con lo que hay en DB,
+                # pero los dejamos por si querés ver exactamente lo que se mandó.
                 respuesta["rubro_nombre"] = item.rubro_nombre
                 respuesta["calle"] = item.calle
                 respuesta["numero"] = item.numero
                 respuesta["inspectores"] = item.inspectores
+
                 actuaciones_creadas.append(respuesta)
 
         return jsonify(

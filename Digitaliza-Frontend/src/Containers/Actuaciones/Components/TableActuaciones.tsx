@@ -147,6 +147,10 @@ const TablaActuaciones = () => {
     enableGlobalFilter: true,
     enableHiding: true,
     enableRowActions: true,
+    initialState: {
+      columnVisibility: { id: false },
+    },
+
     onEditingRowSave: handleSaveRow,
     renderRowActions: ({ row }) => (
       <Box sx={{ display: "flex", gap: "0.5rem" }}>

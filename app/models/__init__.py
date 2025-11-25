@@ -12,9 +12,6 @@ from .contribuyente import Contribuyente
 from .distrito import Distrito
 from .documento_tipo import DocumentoTipo
 from .domicilio import Domicilio
-from .establecimiento import Establecimiento
-from .establecimiento_domicilio import EstablecimientoDomicilio
-from .establecimiento_rubro import EstablecimientoRubro
 from .expediente import Expediente
 from .genero import Genero
 from .inspector import Inspector
@@ -24,7 +21,7 @@ from .notificacion import Notificacion
 from .notificacion_motivo import NotificacionMotivo
 from .oficio import Oficio
 from .orden_trabajo import OrdenTrabajo
-from .relevamiento import Relevamiento
+from .relevamiento_simple import RelevamientoSimple
 from .rubro import Rubro
 from .turno import Turno
 from .usuario import Usuario

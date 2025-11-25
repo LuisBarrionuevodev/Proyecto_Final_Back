@@ -9,7 +9,7 @@ import VerInformeLogo from "../assets-inicio/VerInformeLogo.svg"
 const CardsInicio = (): JSX.Element => {
 
     return (
-        <Grid container marginTop={"15px"} padding={5} spacing={8} >
+        <Grid container marginTop={"15px"} padding={5} spacing={8} justifyContent= "space-between" >
             <Grid size={{ xs: 12, sm: 6, md: 6, lg: 3 }}>
                 <a href="/actuaciones">
 
@@ -58,21 +58,7 @@ const CardsInicio = (): JSX.Element => {
                 </a>
             </Grid>
 
-            <Grid size={{ xs: 12, sm: 6, md: 6, lg: 3 }}>
-                <a href="/informe">
-
-                    <Grid sx={CardStyle}>
-                        <Box component="img" src={VerInformeLogo} alt="IMG-INFORME" />
-                    </Grid>
-
-                    <Grid sx={StyleBoxTextCard}>
-                        <Typography sx={StyleTextCard}>
-                            Ver Informe Mensual
-                        </Typography>
-                    </Grid>
-
-                </a>
-            </Grid>
+         
 
         </Grid>
     );

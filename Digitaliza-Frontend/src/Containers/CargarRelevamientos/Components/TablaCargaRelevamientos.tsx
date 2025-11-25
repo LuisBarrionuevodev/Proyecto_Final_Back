@@ -7,6 +7,7 @@ import {
 } from "material-react-table";
 import { Box, Typography } from "@mui/material";
 import { useState } from "react";
+
 import type { IRelevamiento } from "../../../types/relevamientos";
 import { createRelevamiento } from "../../../api/relevamientosApi";
 import { TABLE_CREAR_RELEVAMIENTOS } from "../../../constants/tableConfig";
@@ -14,16 +15,14 @@ import { TableGeneralStyles, TableTitleStyles } from "../../../styles/TablasStyl
 import { validateRelevamiento } from "../../../utils/validations";
 import { TableButtonCreate } from "./TableButtonCreate";
 
-
-
 const TablaCargaRelevamientos = () => {
-  const [validationErrors, setValidationErrors] = useState<Record<string, string | undefined>>({});
+  const [validationErrors, setValidationErrors] =
+    useState<Record<string, string | undefined>>({});
   const [data, setData] = useState<IRelevamiento[]>([]);
 
   const validateRow = (row: MRT_Row<IRelevamiento>) => {
     setValidationErrors(validateRelevamiento(row._valuesCache));
   };
-
 
   const handleCreateNewRow: MRT_TableOptions<IRelevamiento>["onCreatingRowSave"] =
     async ({ values, table }) => {
@@ -34,15 +33,23 @@ const TablaCargaRelevamientos = () => {
       }
 
       try {
-        const nuevoRelevamiento = await createRelevamiento(values as IRelevamiento);
+        // Payload sin ID (lo genera el backend)
+        const payload: Omit<IRelevamiento, "id"> = {
+          fecha: String(values.fecha),
+          inspector: String(values.inspector),
+          direccion: String(values.direccion),
+          rubro: String(values.rubro),
+        };
+
+        const nuevoRelevamiento = await createRelevamiento(payload);
 
         table.setCreatingRow(null);
         setValidationErrors({});
-        setData(prev => [...prev, nuevoRelevamiento]);
+        setData((prev) => [...prev, nuevoRelevamiento]);
+
         setTimeout(() => {
           table.setCreatingRow(true);
         }, 50);
-
       } catch (error) {
         console.error("Error al crear relevamiento:", error);
       }
@@ -63,7 +70,7 @@ const TablaCargaRelevamientos = () => {
         error: !!validationErrors[cell.column.id],
         helperText: validationErrors[cell.column.id],
         onChange: (e) => {
-          row._valuesCache[cell.column.id] = e.target.value;
+          row._valuesCache[cell.column.id] = String(e.target.value);
         },
         onBlur: () => validateRow(row),
       }),
@@ -75,7 +82,7 @@ const TablaCargaRelevamientos = () => {
         error: !!validationErrors[cell.column.id],
         helperText: validationErrors[cell.column.id],
         onChange: (e) => {
-          row._valuesCache[cell.column.id] = e.target.value;
+          row._valuesCache[cell.column.id] = String(e.target.value);
         },
         onBlur: () => validateRow(row),
       }),
@@ -87,7 +94,7 @@ const TablaCargaRelevamientos = () => {
         error: !!validationErrors[cell.column.id],
         helperText: validationErrors[cell.column.id],
         onChange: (e) => {
-          row._valuesCache[cell.column.id] = e.target.value;
+          row._valuesCache[cell.column.id] = String(e.target.value);
         },
         onBlur: () => validateRow(row),
       }),
@@ -99,7 +106,7 @@ const TablaCargaRelevamientos = () => {
         error: !!validationErrors[cell.column.id],
         helperText: validationErrors[cell.column.id],
         onChange: (e) => {
-          row._valuesCache[cell.column.id] = e.target.value;
+          row._valuesCache[cell.column.id] = String(e.target.value);
         },
         onBlur: () => validateRow(row),
         onKeyDown: (e) => {
@@ -120,7 +127,7 @@ const TablaCargaRelevamientos = () => {
   const table = useMaterialReactTable({
     ...TABLE_CREAR_RELEVAMIENTOS,
     columns,
-    data: data,
+    data,
     initialState: {
       columnVisibility: { id: false },
     },
@@ -134,8 +141,10 @@ const TablaCargaRelevamientos = () => {
 
   return (
     <Box sx={{ width: "100%" }}>
-      <Box sx={{...TableGeneralStyles, }}>
-        <Typography sx={TableTitleStyles}>Creación de relevamiento</Typography>
+      <Box sx={{ ...TableGeneralStyles }}>
+        <Typography sx={TableTitleStyles}>
+          Creación de relevamiento
+        </Typography>
         <MaterialReactTable table={table} />
       </Box>
     </Box>

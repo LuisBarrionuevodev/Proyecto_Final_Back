@@ -10,7 +10,6 @@ class Contribuyente(db.Model):
     apellido = db.Column(db.String(128), nullable=False)
     nombre = db.Column(db.String(128), nullable=False)
 
-    # FKs a catálogos
     doc_tipo_id = db.Column(
         db.Integer,
         ForeignKey("documento_tipo.id", ondelete="SET NULL", onupdate="CASCADE"),
@@ -21,8 +20,6 @@ class Contribuyente(db.Model):
         ForeignKey("genero.id", ondelete="SET NULL", onupdate="CASCADE"),
         nullable=True,
     )
-
-    # ÚNICO campo para DNI/CUIL/LE/LC/etc.  (según doc_tipo)
     doc_nro = db.Column(db.String(20), nullable=True)
 
     telefono = db.Column(db.String(30), nullable=True)
@@ -41,11 +38,17 @@ class Contribuyente(db.Model):
 
     doc_tipo = db.relationship("DocumentoTipo", lazy="joined", passive_deletes=True)
     genero = db.relationship("Genero", lazy="joined", passive_deletes=True)
-    establecimientos = db.relationship(
-        "Establecimiento",
+
+    # 🔁 NUEVO: 1 contribuyente → N domicilios
+    domicilios = db.relationship(
+        "Domicilio",
         back_populates="contribuyente",
-        lazy="selectin",  # opcional; podés dejarlo sin lazy
+        lazy="selectin",
+        cascade="all, delete-orphan",
     )
+
+    # ❌ ANTES: establecimientos = ...
+    # Esa relación ya no se usa con el nuevo modelo.
 
     def __repr__(self):
         return f"<Contribuyente id={self.id} {self.apellido}, {self.nombre}>"
@@ -68,9 +71,7 @@ class Contribuyente(db.Model):
         }
 
     __table_args__ = (
-        # Unicidad por combinación: no puede repetirse el mismo número para el mismo tipo
         db.UniqueConstraint("doc_tipo_id", "doc_nro", name="uq_contrib_doc"),
-        # Índices útiles para búsqueda
         Index("idx_contrib_apellido_nombre", "apellido", "nombre"),
         Index("idx_contrib_doc_std", "doc_tipo_id", "doc_nro"),
     )

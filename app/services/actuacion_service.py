@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import date
 from typing import Iterable, Optional
 
 from sqlalchemy import func, select
@@ -22,9 +21,6 @@ from app.models import (
     Contribuyente,
     DocumentoTipo,
     Domicilio,
-    Establecimiento,
-    EstablecimientoDomicilio,
-    EstablecimientoRubro,
     Expediente,
     Inspector,
     MotivoClausura,
@@ -44,12 +40,21 @@ class ActuacionServiceError(Exception):
     """Errores de negocio al guardar actuaciones."""
 
 
+# ==========================
+#   HELPERS GENERALES
+# ==========================
+
+
 def _anio_acta(item: ActuacionItem, anio_campo: Optional[int]) -> int:
     """Devuelve el año informado o deriva del año de la actuación."""
     return int(anio_campo or item.fecha_actuacion.year)
 
 
 def _get_or_create_orden_trabajo(numero: str) -> OrdenTrabajo:
+    """
+    Busca una OT por número. Si no existe, la crea.
+    Esto mantiene la unicidad de orden_trabajo.numero.
+    """
     stmt = select(OrdenTrabajo).filter_by(numero=numero)
     existente = db.session.execute(stmt).scalar_one_or_none()
     if existente:
@@ -62,6 +67,10 @@ def _get_or_create_orden_trabajo(numero: str) -> OrdenTrabajo:
 
 
 def _get_or_create_documento_tipo(codigo: str) -> DocumentoTipo:
+    """
+    Devuelve un tipo de documento. Si no existe, lo crea
+    con nombre=código (por ahora simple).
+    """
     stmt = select(DocumentoTipo).filter(
         func.upper(DocumentoTipo.codigo) == codigo.upper()
     )
@@ -78,10 +87,15 @@ def _get_or_create_documento_tipo(codigo: str) -> DocumentoTipo:
 def _get_or_create_contribuyente(
     doc_tipo: DocumentoTipo, doc_nro: str, apellido: str, nombre: Optional[str]
 ) -> Contribuyente:
+    """
+    Unicidad por (doc_tipo_id, doc_nro).
+
+    - Si ya existe, actualiza apellido/nombre si vienen valores nuevos.
+    - Si no existe, crea uno nuevo.
+    """
     stmt = select(Contribuyente).filter_by(doc_tipo_id=doc_tipo.id, doc_nro=doc_nro)
     existente = db.session.execute(stmt).scalar_one_or_none()
     if existente:
-        # actualizamos datos básicos si vienen
         existente.apellido = apellido or existente.apellido
         existente.nombre = nombre or existente.nombre
         return existente
@@ -98,6 +112,9 @@ def _get_or_create_contribuyente(
 
 
 def _get_or_create_rubro(nombre: str) -> Rubro:
+    """
+    Rubro único por nombre (case-insensitive).
+    """
     stmt = select(Rubro).filter(func.upper(Rubro.nombre) == nombre.upper())
     existente = db.session.execute(stmt).scalar_one_or_none()
     if existente:
@@ -110,103 +127,62 @@ def _get_or_create_rubro(nombre: str) -> Rubro:
 
 
 # ==========================
-#   ESTABLECIMIENTO / RUBRO / DOMICILIO
+#   DOMICILIO
 # ==========================
 
 
-def _get_or_create_establecimiento(contribuyente: Contribuyente) -> Establecimiento:
+def _normalizar_calle(calle: str) -> str:
+    """Normaliza la calle (trim + mayúsculas) para comparar."""
+    return (calle or "").strip().upper()
+
+
+def _normalizar_numero(numero: Optional[str]) -> Optional[str]:
+    """Normaliza el número a string sin espacios; si queda vacío, lo deja en None."""
+    if numero is None:
+        return None
+    s = str(numero).strip()
+    return s or None
+
+
+def _get_or_create_domicilio(
+    contribuyente: Contribuyente,
+    rubro: Rubro,
+    calle: str,
+    numero: Optional[str],
+) -> Domicilio:
     """
-    Un contribuyente puede tener varios establecimientos, pero por ahora
-    usamos un establecimiento base por contribuyente:
-    - si ya existe alguno, lo reutilizamos;
-    - si no, creamos uno nuevo con un nombre NO nulo.
+    Crea (si hace falta) un domicilio comercial asociado al contribuyente
+    para un rubro determinado.
+
+    Por ahora tomamos como 'clave natural':
+    (contribuyente_id, rubro_id, calle, numero).
     """
-    stmt = select(Establecimiento).filter_by(contribuyente_id=contribuyente.id)
+    calle_std = _normalizar_calle(calle)
+    numero_std = _normalizar_numero(numero)
+
+    stmt = select(Domicilio).filter(
+        func.upper(Domicilio.calle) == calle_std,
+        Domicilio.numero == numero_std,
+        Domicilio.contribuyente_id == contribuyente.id,
+        Domicilio.rubro_id == rubro.id,
+    )
     existente = db.session.execute(stmt).scalar_one_or_none()
     if existente:
         return existente
 
-    apellido = (contribuyente.apellido or "").strip().upper()
-    nombre = (contribuyente.nombre or "").strip().upper()
-
-    if apellido and nombre:
-        nombre_est = f"{apellido} {nombre}"
-    else:
-        nombre_est = apellido or nombre or "SIN NOMBRE"
-
-    nuevo = Establecimiento(
+    domicilio = Domicilio(
+        calle=calle_std,
+        numero=numero_std,
         contribuyente_id=contribuyente.id,
-        nombre=nombre_est,
-    )
-    db.session.add(nuevo)
-    db.session.flush()
-    return nuevo
-
-
-...
-
-
-def _asegurar_establecimiento_rubro(
-    establecimiento: Establecimiento,
-    rubro: Rubro,
-    fecha_desde: date,
-) -> EstablecimientoRubro:
-    """
-    Vincula establecimiento con rubro en la tabla puente.
-    Setea fecha_desde (NOT NULL en la BD).
-    """
-    existente = db.session.execute(
-        select(EstablecimientoRubro).filter_by(
-            establecimiento_id=establecimiento.id,
-            rubro_id=rubro.id,
-        )
-    ).scalar_one_or_none()
-    if existente:
-        return existente
-
-    vinculo = EstablecimientoRubro(
-        establecimiento_id=establecimiento.id,
         rubro_id=rubro.id,
-        fecha_desde=fecha_desde,
-        fecha_hasta=None,
     )
-    db.session.add(vinculo)
+    db.session.add(domicilio)
     db.session.flush()
-    return vinculo
-
-
-def _asegurar_establecimiento_domicilio(
-    establecimiento: Establecimiento,
-    domicilio: Domicilio,
-    fecha_desde: date,
-) -> EstablecimientoDomicilio:
-    """
-    Crea (si hace falta) el vínculo establecimiento ↔ domicilio
-    y devuelve ese EstablecimientoDomicilio para usarlo en la actuación.
-    Setea fecha_desde (NOT NULL en la BD).
-    """
-    existente = db.session.execute(
-        select(EstablecimientoDomicilio).filter_by(
-            establecimiento_id=establecimiento.id,
-            domicilio_id=domicilio.id,
-        )
-    ).scalar_one_or_none()
-    if existente:
-        return existente
-
-    vinculo = EstablecimientoDomicilio(
-        establecimiento_id=establecimiento.id,
-        domicilio_id=domicilio.id,
-        fecha_desde=fecha_desde,
-        fecha_hasta=None,
-    )
-    db.session.add(vinculo)
-    db.session.flush()
-    return vinculo
+    return domicilio
 
 
 # ==========================
-#   INSPECTORES / DOMICILIO
+#   INSPECTORES
 # ==========================
 
 
@@ -216,6 +192,10 @@ def _next_inspector_legajo() -> int:
 
 
 def _get_or_create_inspector(apellido: str) -> Inspector:
+    """
+    Busca inspector por apellido (case-insensitive).
+    Si no existe, lo crea con legajo incremental y nombre=apellido.
+    """
     stmt = select(Inspector).filter(func.upper(Inspector.apellido) == apellido.upper())
     inspector = db.session.execute(stmt).scalar_one_or_none()
     if inspector:
@@ -228,14 +208,11 @@ def _get_or_create_inspector(apellido: str) -> Inspector:
     return nuevo
 
 
-def _crear_domicilio(calle: str, numero: str) -> Domicilio:
-    domicilio = Domicilio(calle=calle, numero=numero)
-    db.session.add(domicilio)
-    db.session.flush()
-    return domicilio
-
-
 def _asegurar_actuacion_inspector(actuacion: Actuacion, inspector: Inspector) -> None:
+    """
+    Asegura el vínculo en la tabla puente actuacion_inspector.
+    Si ya existe (actuacion_id, inspector_id), no duplica.
+    """
     existe = db.session.execute(
         select(ActuacionInspector).filter_by(
             actuacion_id=actuacion.id, inspector_id=inspector.id
@@ -256,13 +233,17 @@ def _asegurar_actuacion_inspector(actuacion: Actuacion, inspector: Inspector) ->
 def _crear_actuacion(
     item: ActuacionItem,
     ot: OrdenTrabajo,
-    est_dom: EstablecimientoDomicilio,
+    domicilio: Domicilio,
 ) -> Actuacion:
+    """
+    Crea la actuación principal, apuntando DIRECTO a domicilio_id
+    (nuevo modelo, sin tablas establecimiento_*).
+    """
     actuacion = Actuacion(
         fecha=item.fecha_actuacion,
         tipo=item.tipo_actuacion,
         orden_trabajo_id=ot.id,
-        establecimiento_domicilio_id=est_dom.id,  # 👈 clave para que no quede NULL
+        domicilio_id=domicilio.id,
         contraproducencia=item.contraproducencia,
         observaciones=None,
     )
@@ -499,28 +480,11 @@ def _crear_acta_decomiso(actuacion: Actuacion, item: ActuacionItem) -> None:
 def _crear_expediente(actuacion: Actuacion, item: ActuacionItem) -> None:
     """
     Crea (si no existe) el expediente vinculado a la actuación.
-
-    Modelo Expediente:
-
-        class Expediente(db.Model):
-            __tablename__ = "expediente"
-
-            id = db.Column(db.Integer, primary_key=True)
-            numero_expediente = db.Column(db.String(30), nullable=False)
-            anio = db.Column(db.SmallInteger, nullable=False)
-            actuacion_id = db.Column(
-                db.Integer,
-                db.ForeignKey("actuacion.id", ondelete="CASCADE", onupdate="CASCADE"),
-                nullable=False,
-                unique=True,
-            )
-            observaciones = db.Column(db.Text, nullable=True)
+    1:1 con actuacion (en el schema nuevo el UNIQUE está sobre actuacion_id).
     """
-
     numero_expediente = (item.expediente_numero or "").strip()
     anio = item.expediente_anio
 
-    # Si no viene número o año, no hacemos nada
     if not numero_expediente or anio is None:
         return
 
@@ -683,6 +647,29 @@ def _procesar_actas_verificar(actuacion: Actuacion, item: ActuacionItem) -> None
 
 
 def crear_actuacion_desde_item(item: ActuacionItem) -> Actuacion:
+    """
+    Orquesta todo el flujo de alta de una actuación:
+      - OT
+      - contribuyente + tipo doc
+      - rubro
+      - domicilio (contribuyente + rubro)
+      - actuación
+      - inspectores
+      - actas (según tipo)
+      - expediente
+    """
+    # Debug útil cuando algo no se persiste como esperás
+    print("DEBUG ITEM >>>")
+    print("  calle:", repr(item.calle))
+    print("  numero:", repr(item.numero))
+    print("  doc_tipo_codigo:", repr(item.doc_tipo_codigo))
+    print("  doc_nro:", repr(item.doc_nro))
+    print("  contrib_apellido:", repr(item.contrib_apellido))
+    print("  contrib_nombre:", repr(item.contrib_nombre))
+    print("  inspectores:", repr(item.inspectores))
+    print("  rubro_nombre:", repr(item.rubro_nombre))
+    print("<<< FIN DEBUG")
+
     try:
         # 1) Orden de trabajo
         ot = _get_or_create_orden_trabajo(item.orden_trabajo_numero)
@@ -699,35 +686,23 @@ def crear_actuacion_desde_item(item: ActuacionItem) -> Actuacion:
         # 3) Rubro
         rubro = _get_or_create_rubro(item.rubro_nombre)
 
-        # 4) Domicilio (de la actuación)
-        domicilio = _crear_domicilio(item.calle, item.numero)
-
-        # 5) Establecimiento asociado al contribuyente
-        establecimiento = _get_or_create_establecimiento(contrib)
-
-        # 6) Vincular establecimiento ↔ rubro (con fecha_desde)
-        _asegurar_establecimiento_rubro(
-            establecimiento,
-            rubro,
-            item.fecha_actuacion,
+        # 4) Domicilio (ya vinculado a contribuyente y rubro)
+        domicilio = _get_or_create_domicilio(
+            contribuyente=contrib,
+            rubro=rubro,
+            calle=item.calle,
+            numero=item.numero,
         )
 
-        # 7) Vincular establecimiento ↔ domicilio (con fecha_desde)
-        est_dom = _asegurar_establecimiento_domicilio(
-            establecimiento,
-            domicilio,
-            item.fecha_actuacion,
-        )
+        # 5) Crear actuación apuntando a domicilio_id
+        actuacion = _crear_actuacion(item, ot, domicilio)
 
-        # 8) Crear actuación apuntando al establecimiento_domicilio
-        actuacion = _crear_actuacion(item, ot, est_dom)
-
-        # 9) Inspectores
+        # 6) Inspectores
         for inspector_nombre in item.inspectores:
             inspector = _get_or_create_inspector(inspector_nombre)
             _asegurar_actuacion_inspector(actuacion, inspector)
 
-        # 10) Actas según tipo de actuación
+        # 7) Actas según tipo de actuación
         tipo = item.tipo_actuacion
         if tipo == "INSPECCION":
             _procesar_actas_base(actuacion, item)
@@ -740,14 +715,13 @@ def crear_actuacion_desde_item(item: ActuacionItem) -> Actuacion:
         else:
             raise ActuacionServiceError(f"Tipo de actuación no soportado: {tipo}")
 
-        # 11) Crear expediente (si viene)
+        # 8) Crear expediente (si viene)
         _crear_expediente(actuacion, item)
 
         return actuacion
 
     except IntegrityError as exc:
         detalle_db = str(getattr(exc, "orig", exc))
-        # si tenés logger, lo usás acá
         raise ActuacionServiceError(
             f"Error de integridad al persistir la actuación: {detalle_db}"
         ) from exc

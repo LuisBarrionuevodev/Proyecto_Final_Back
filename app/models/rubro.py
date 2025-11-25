@@ -18,11 +18,12 @@ class Rubro(db.Model):
         server_default=func.current_timestamp(),
         onupdate=func.current_timestamp(),
     )
-    relevamiento = db.relationship(
-        "Relevamiento",
+
+    # 🔁 NUEVO: 1 rubro → N domicilios
+    domicilios = db.relationship(
+        "Domicilio",
         back_populates="rubro",
-        uselist=False,  # 1:1
-        passive_deletes=True,
+        lazy="selectin",
     )
 
     def __repr__(self):

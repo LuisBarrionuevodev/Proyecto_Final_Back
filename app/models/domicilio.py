@@ -28,6 +28,20 @@ class Domicilio(db.Model):
         nullable=True,
     )
 
+    # ✅ NUEVO: dueño del local
+    contribuyente_id = db.Column(
+        db.Integer,
+        ForeignKey("contribuyente.id", ondelete="SET NULL", onupdate="CASCADE"),
+        nullable=True,
+    )
+
+    # ✅ NUEVO: rubro principal de ese domicilio
+    rubro_id = db.Column(
+        db.Integer,
+        ForeignKey("rubro.id", ondelete="SET NULL", onupdate="CASCADE"),
+        nullable=True,
+    )
+
     lat = db.Column(db.Numeric(9, 6), nullable=True)
     lon = db.Column(db.Numeric(9, 6), nullable=True)
 
@@ -46,13 +60,21 @@ class Domicilio(db.Model):
     # relaciones
     barrio = relationship("Barrio", back_populates="domicilios")
     distrito = relationship("Distrito", back_populates="domicilios")
-    relevamiento = db.relationship("Relevamiento", back_populates="domicilio",)
-    # 👇 relación con la tabla puente establecimiento_domicilio
-    establecimientos = relationship(
-        "EstablecimientoDomicilio",
-        back_populates="domicilio",
-        cascade="all, delete-orphan",
+
+    # 🔁 NUEVO
+    contribuyente = relationship(
+        "Contribuyente",
+        back_populates="domicilios",
+        lazy="joined",
     )
+    rubro = relationship(
+        "Rubro",
+        back_populates="domicilios",
+        lazy="joined",
+    )
+
+    # ❌ ANTES: tabla puente establecimiento_domicilio
+    # establecimientos = relationship("EstablecimientoDomicilio", ...)
 
     def __repr__(self) -> str:
         return f"<Domicilio id={self.id} calle={self.calle!r} numero={self.numero!r}>"
